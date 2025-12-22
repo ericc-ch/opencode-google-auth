@@ -12,7 +12,9 @@
 
 ## Code Style & Guidelines
 
-- **Context:** Check inside `.context/` for reference. Do not assume; double-check against existing implementations.
+> [!IMPORTANT]
+> **Context:** Always check inside `.context/` for reference before starting. Do not assume; double-check against existing implementations to ensure consistency.
+
 - **Imports:** Group by (1) built-in, (2) external, (3) internal. Use relative paths.
 - **Types:** Strict TypeScript; avoid `any`. Prefer explicit return types.
 - **Logic:**
