@@ -1,0 +1,55 @@
+{
+  "name": "pkg-placeholder",
+  "version": "0.0.0",
+  "description": "_description_",
+  "keywords": [
+    "pkg-placeholder"
+  ],
+  "homepage": "https://github.com/ericc-ch/pkg-placeholder",
+  "bugs": "https://github.com/ericc-ch/pkg-placeholder/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ericc-ch/pkg-placeholder.git"
+  },
+  "author": {
+    "name": "Erick Christian",
+    "email": "erickchristian48@gmail.com"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "default": "./dist/main.js"
+    }
+  },
+  "bin": {
+    "pkg-placeholder": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "format": "oxfmt",
+    "lint": "oxlint",
+    "prepack": "bun run build",
+    "release": "bumpp && npm publish",
+    "start": "bun run src/cli.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "yargs": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.4",
+    "@types/yargs": "^17.0.35",
+    "bumpp": "^10.3.2",
+    "oxfmt": "^0.17.0",
+    "oxlint": "^1.32.0",
+    "tsdown": "^0.17.2",
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

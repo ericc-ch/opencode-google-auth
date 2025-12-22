@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig.json",
+
+  "compilerOptions": {
+    // Language and Environment
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    // allowJs conflicts with isolatedDeclarations
+    // Use allowJs for gradual TS migration, isolatedDeclarations for fast .d.ts generation via external tools
+    "allowJs": false,
+
+    // Modules
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+
+    // Emit
+    "noEmit": true,
+    "declaration": true,
+    "isolatedDeclarations": true,
+
+    // Type Checking
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": true,
+
+    // Completeness
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+
+    // Code Quality
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+
+    // Interop Constraints
+    "forceConsistentCasingInFileNames": true,
+
+    // Advanced
+    "erasableSyntaxOnly": true,
+  },
+}
