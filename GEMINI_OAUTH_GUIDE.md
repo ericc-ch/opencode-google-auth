@@ -770,3 +770,218 @@ NodeRuntime.runMain(
 | **Timeouts**         | Manual `setTimeout`    | `Effect.timeout()`                                              |
 | **Async Operations** | `Promise`              | `Effect.async` / `Effect.tryPromise`                            |
 | **Configuration**    | Environment variables  | `Config` layer with type safety                                 |
+
+---
+
+# OAuth 2.0 Authorization Flow (Personal Account via Browser)
+
+This document outlines the "happy path" for a personal user authenticating via the browser, based on `@packages/core/src/code_assist/oauth2.ts`.
+
+## 1. Client Initialization
+The process begins in `initOauthClient`, where the `OAuth2Client` is instantiated with the application's credentials.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts
+
+const client = new OAuth2Client({
+  clientId: OAUTH_CLIENT_ID,
+  clientSecret: OAUTH_CLIENT_SECRET,
+  transporterOptions: {
+    proxy: config.getProxy(),
+  },
+});
+```
+
+## 2. Setting up Web Authorization
+The system prepares for the browser interaction by calling `authWithWeb`. This function:
+1.  Finds an available local port.
+2.  Constructs the local redirect URI.
+3.  Generates a random state string for security (CSRF protection).
+4.  Generates the Google Authorization URL.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts
+
+async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
+  const port = await getAvailablePort();
+  // ...
+  const redirectUri = `http://localhost:${port}/oauth2callback`;
+  const state = crypto.randomBytes(32).toString('hex');
+  const authUrl = client.generateAuthUrl({
+    redirect_uri: redirectUri,
+    access_type: 'offline',
+    scope: OAUTH_SCOPE,
+    state,
+  });
+
+  // ... (Server setup continues below)
+```
+
+## 3. Starting the Local Server
+A temporary HTTP server is created to listen for the callback from Google. It returns a `loginCompletePromise` that resolves when the flow is finished.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts
+
+  const loginCompletePromise = new Promise<void>((resolve, reject) => {
+    const server = http.createServer(async (req, res) => {
+      // ... (Callback handling logic)
+    });
+
+    server.listen(port, host, () => {
+      // Server started successfully
+    });
+    // ...
+  });
+
+  return {
+    authUrl,
+    loginCompletePromise,
+  };
+}
+```
+
+## 4. User Interaction (Opening Browser)
+Back in `initOauthClient`, the CLI opens the generated `authUrl` in the user's default browser and waits for the local server to confirm completion.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts
+
+    const webLogin = await authWithWeb(client);
+
+    // ... logging messages ...
+
+    // Attempt to open the authentication URL in the default browser.
+    const childProcess = await open(webLogin.authUrl);
+
+    // ...
+
+    // Wait for the server callback (or timeout)
+    await Promise.race([webLogin.loginCompletePromise, timeoutPromise]);
+```
+
+## 5. Handling the Callback
+When the user approves the login in the browser, Google redirects to `http://localhost:{port}/oauth2callback`. The local server intercepts this request.
+
+It verifies the `state`, exchanges the authorization code for tokens, and sets them on the client.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts (inside http.createServer)
+
+        // acquire the code from the querystring
+        const qs = new url.URL(req.url!, 'http://localhost:3000').searchParams;
+
+        if (qs.get('state') !== state) {
+          // ... Handle CSRF mismatch ...
+        } else if (qs.get('code')) {
+          try {
+            // Exchange code for Access/Refresh tokens
+            const { tokens } = await client.getToken({
+              code: qs.get('code')!,
+              redirect_uri: redirectUri,
+            });
+            
+            // Set credentials in memory
+            client.setCredentials(tokens);
+
+            // Optional: Fetch user info immediately for UI
+            await fetchAndCacheUserInfo(client);
+
+            // Redirect user's browser to success page
+            res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
+            res.end();
+            
+            // Resolve the main promise to unblock the CLI
+            resolve();
+          } catch (error) {
+             // ... Handle errors ...
+          }
+        }
+```
+
+## 6. Token Persistence
+When `client.setCredentials` is called (or whenever tokens are refreshed), the `tokens` event listener is triggered to save the credentials to disk.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts
+
+  client.on('tokens', async (tokens: Credentials) => {
+    if (useEncryptedStorage) {
+      await OAuthCredentialStorage.saveCredentials(tokens);
+    } else {
+      await cacheCredentials(tokens);
+    }
+
+    await triggerPostAuthCallbacks(tokens);
+  });
+```
+
+## 7. Cleanup & Return
+Once `loginCompletePromise` resolves, the temporary server closes (inside `finally` block of `authWithWeb`), and `initOauthClient` returns the authenticated client.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts
+
+    await Promise.race([webLogin.loginCompletePromise, timeoutPromise]);
+
+    // ... logging success ...
+
+    await triggerPostAuthCallbacks(client.credentials);
+  }
+
+  return client;
+
+## 8. Handling Existing Tokens
+When `initOauthClient` is called, it first checks for previously saved credentials to avoid unnecessary re-authentication.
+
+1.  **Load:** It calls `fetchCachedCredentials()` to read tokens from disk (either encrypted or plain JSON).
+2.  **Verify:** If tokens exist, it sets them on the client and attempts to verify them:
+    *   `client.getAccessToken()`: Checks if the access token is structurally valid and not expired locally.
+    *   `client.getTokenInfo(token)`: Makes a network call to Google's servers to ensure the token hasn't been revoked.
+3.  **Resume:** If valid, it triggers callbacks and returns the client immediately, skipping the browser flow.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts
+
+  const credentials = await fetchCachedCredentials();
+  
+  // ...
+
+  if (credentials) {
+    client.setCredentials(credentials as Credentials);
+    try {
+      // Local check
+      const { token } = await client.getAccessToken();
+      if (token) {
+        // Server check
+        await client.getTokenInfo(token);
+        
+        // ... success ...
+        return client;
+      }
+    } catch (error) {
+      // Invalid/Expired credentials -> proceed to full auth flow
+    }
+  }
+```
+
+## 9. Token Refreshing
+The `google-auth-library` handles token refreshing automatically. When an access token expires, the client uses the `refresh_token` to request a new one.
+
+To ensure these new tokens are persisted:
+1.  **Listener:** The code attaches a listener to the `tokens` event on the client.
+2.  **Save:** Whenever tokens are refreshed (or initially set), this listener fires, saving the new credentials to storage.
+
+```typescript
+// @packages/core/src/code_assist/oauth2.ts
+
+  client.on('tokens', async (tokens: Credentials) => {
+    if (useEncryptedStorage) {
+      await OAuthCredentialStorage.saveCredentials(tokens);
+    } else {
+      await cacheCredentials(tokens);
+    }
+
+    await triggerPostAuthCallbacks(tokens);
+  });
+```
