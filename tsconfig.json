@@ -19,7 +19,7 @@
     // Emit
     "noEmit": true,
     "declaration": true,
-    "isolatedDeclarations": true,
+    // "isolatedDeclarations": true,
 
     // Type Checking
     "strict": true,
@@ -43,6 +43,6 @@
     "forceConsistentCasingInFileNames": true,
 
     // Advanced
-    "erasableSyntaxOnly": true,
-  },
+    "erasableSyntaxOnly": true
+  }
 }
