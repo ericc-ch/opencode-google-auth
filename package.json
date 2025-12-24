@@ -38,6 +38,10 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@effect/platform": "^0.94.0",
+    "@effect/platform-bun": "^0.87.0",
+    "effect": "^3.19.13",
+    "google-auth-library": "^10.5.0",
     "yargs": "^18.0.0"
   },
   "devDependencies": {
