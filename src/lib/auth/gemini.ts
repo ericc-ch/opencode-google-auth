@@ -4,9 +4,10 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "@effect/platform"
-import {} from "eff"
-import { Effect, pipe, Schema } from "effect"
+import { BunHttpServer, BunRuntime } from "@effect/platform-bun"
+import { Deferred, Effect, pipe, Schema } from "effect"
 import { OAuth2Client } from "google-auth-library"
+import open from "open"
 
 const OAUTH_CLIENT_ID =
   "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
@@ -26,11 +27,6 @@ const SIGN_IN_SUCCESS_URL =
 const SIGN_IN_FAILURE_URL =
   "https://developers.google.com/gemini-code-assist/auth_failure_gemini"
 
-const client = new OAuth2Client({
-  clientId: OAUTH_CLIENT_ID,
-  clientSecret: OAUTH_CLIENT_SECRET,
-})
-
 const SuccessParamsSchema = Schema.Struct({
   code: Schema.String,
   state: Schema.String,
@@ -46,25 +42,48 @@ const isFailureParams = Schema.is(FailureParamsSchema)
 
 const ParamsSchema = Schema.Union(SuccessParamsSchema, FailureParamsSchema)
 
-const router = HttpRouter.empty.pipe(
-  HttpRouter.get(
-    "/",
-    Effect.gen(function* () {
-      const query = yield* HttpServerRequest.schemaSearchParams(ParamsSchema)
+const main = Effect.gen(function* () {
+  yield* HttpServer.logAddress
 
-      if (isSuccessParams(query)) {
-        Effect.log("Success:", query)
-      } else if (isFailureParams(query)) {
-        Effect.log("Failure:", query)
-      } else {
-        // What the fuck is wrong with the query params???
-      }
+  const deferredSearch = yield* Deferred.make<typeof ParamsSchema.Type>()
+  const redirectUri = yield* HttpServer.addressFormattedWith((address) =>
+    Effect.succeed(`${address}/oauth2callback`),
+  )
 
-      return HttpServerResponse.text("Ok")
-    }),
-  ),
-)
+  const client = new OAuth2Client({
+    clientId: OAUTH_CLIENT_ID,
+    clientSecret: OAUTH_CLIENT_SECRET,
+  })
 
-const main = Effect.gen(function* () {})
+  const state = crypto.randomUUID()
+  const authUrl = client.generateAuthUrl({
+    redirect_uri: redirectUri,
+    access_type: "offline",
+    scope: OAUTH_SCOPE,
+    state,
+  })
 
-const tonot = HttpServer.serveEffect(router)
+  yield* Effect.promise(() => open(authUrl))
+
+  yield* pipe(
+    HttpRouter.empty,
+    HttpRouter.get(
+      "/oauth2callback",
+      Effect.gen(function* () {
+        const search = yield* HttpServerRequest.schemaSearchParams(ParamsSchema)
+        yield* Deferred.succeed(deferredSearch, search)
+        return yield* HttpServerResponse.text("Ok")
+      }),
+    ),
+    HttpServer.serveEffect(),
+  )
+
+  yield* Deferred.await(deferredSearch)
+})
+
+const serveOptions = {
+  port: 0,
+} satisfies Partial<Bun.Serve.Options<undefined, never>>
+const ServerLive = BunHttpServer.layer(serveOptions)
+
+BunRuntime.runMain(pipe(main, Effect.scoped, Effect.provide(ServerLive)))
