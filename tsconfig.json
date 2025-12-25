@@ -43,6 +43,12 @@
     "forceConsistentCasingInFileNames": true,
 
     // Advanced
-    "erasableSyntaxOnly": true
-  }
+    "erasableSyntaxOnly": true,
+
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+      },
+    ],
+  },
 }
