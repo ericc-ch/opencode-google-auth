@@ -1,1 +1,12 @@
-{ "file_scan_exclusions": [".git/", ".context/"] }
+{
+  "lsp": {
+    "vtsls": {
+      "settings": {
+        "vtsls": {
+          "autoUseWorkspaceTsdk": true,
+        },
+      },
+    },
+  },
+  "file_scan_exclusions": [".git/", ".context/"],
+}
