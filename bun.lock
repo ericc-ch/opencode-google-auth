@@ -7,13 +7,13 @@
       "dependencies": {
         "@effect/platform": "^0.94.0",
         "@effect/platform-bun": "^0.87.0",
+        "@opencode-ai/plugin": "^1.0.203",
         "effect": "^3.19.13",
         "google-auth-library": "^10.5.0",
         "open": "^11.0.0",
       },
       "devDependencies": {
         "@effect/language-service": "^0.62.5",
-        "@opencode-ai/plugin": "^1.0.203",
         "@types/bun": "^1.3.5",
         "@types/yargs": "^17.0.35",
         "bumpp": "^10.3.2",
