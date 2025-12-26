@@ -5,7 +5,7 @@ import {
   HttpServerResponse,
 } from "@effect/platform"
 import { BunHttpServer, BunRuntime } from "@effect/platform-bun"
-import { Data, Deferred, Effect, Match, pipe, Schema } from "effect"
+import { Data, Deferred, Effect, pipe, Schema } from "effect"
 import { OAuth2Client } from "google-auth-library"
 import open from "open"
 
@@ -27,7 +27,6 @@ const SuccessParamsSchema = Schema.Struct({
   code: Schema.String,
   state: Schema.String,
 })
-const isSuccessParams = Schema.is(SuccessParamsSchema)
 
 const FailureParamsSchema = Schema.Struct({
   error: Schema.String,
@@ -90,7 +89,19 @@ const main = Effect.gen(function* () {
           })
         }
 
-        client.getToken
+        const result = yield* Effect.tryPromise({
+          try: () =>
+            client.getToken({
+              code: search.code,
+              redirect_uri: redirectUri,
+            }),
+          catch: (error) =>
+            new OAuthError({
+              message: `Failed to get token: ${JSON.stringify(error)}`,
+            }),
+        })
+
+        yield* Effect.log(result.tokens)
 
         return yield* HttpServerResponse.redirect(SIGN_IN_SUCCESS_URL)
       }).pipe(
