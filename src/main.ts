@@ -1,8 +1,21 @@
-export { GeminiCLIOAuthPlugin, GoogleOAuthPlugin } from "./src/plugin"
+import type { Plugin } from "@opencode-ai/plugin"
 
-export { authorizeGemini, exchangeGemini } from "./src/gemini/oauth"
-
-export type {
-  GeminiAuthorization,
-  GeminiTokenExchangeResult,
-} from "./src/gemini/oauth"
+export const main: Plugin = async (ctx) => {
+  return {
+    auth: {
+      provider: "gemini-cli",
+      methods: [
+        {
+          type: "oauth",
+          label: "OAuth with Google",
+          authorize: async () => {
+            return {
+              callback,
+              // idk theres more
+            }
+          },
+        },
+      ],
+    },
+  }
+}
