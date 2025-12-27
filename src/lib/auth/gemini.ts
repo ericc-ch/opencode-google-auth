@@ -4,8 +4,7 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "@effect/platform"
-import { BunHttpServer, BunRuntime } from "@effect/platform-bun"
-import { Data, Deferred, Effect, pipe, Schema } from "effect"
+import { Data, Deferred, Effect, Fiber, pipe, Schema } from "effect"
 import { OAuth2Client } from "google-auth-library"
 import open from "open"
 
@@ -37,87 +36,109 @@ const isFailureParams = Schema.is(FailureParamsSchema)
 
 const ParamsSchema = Schema.Union(SuccessParamsSchema, FailureParamsSchema)
 
-class OAuthBrowserError extends Data.TaggedError("OAuthBrowserError")<{
-  readonly error: unknown
-}> {}
-
 class OAuthError extends Data.TaggedError("OAuthError")<{
+  readonly _error: unknown
   readonly message: string
 }> {}
 
-const main = Effect.gen(function* () {
-  yield* HttpServer.logAddress
+export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
+  sync: () => {
+    const client = new OAuth2Client({
+      clientId: OAUTH_CLIENT_ID,
+      clientSecret: OAUTH_CLIENT_SECRET,
+    })
 
-  const finished = yield* Deferred.make<void>()
-  const redirectUri = yield* HttpServer.addressFormattedWith((address) =>
-    Effect.succeed(`${address}/oauth2callback`),
-  )
+    return {
+      authenticate: Effect.fn(function* () {
+        yield* HttpServer.logAddress
 
-  const client = new OAuth2Client({
-    clientId: OAUTH_CLIENT_ID,
-    clientSecret: OAUTH_CLIENT_SECRET,
-  })
+        const deferredParams = yield* Deferred.make<typeof ParamsSchema.Type>()
 
-  const state = crypto.randomUUID()
-  const authUrl = client.generateAuthUrl({
-    redirect_uri: redirectUri,
-    access_type: "offline",
-    scope: OAUTH_SCOPE,
-    state,
-  })
+        const redirectUri = yield* HttpServer.addressFormattedWith((address) =>
+          Effect.succeed(`${address}/oauth2callback`),
+        )
+        const state = crypto.randomUUID()
 
-  yield* Effect.tryPromise({
-    try: () => open(authUrl),
-    catch: (error) => new OAuthBrowserError({ error }),
-  })
+        const authUrl = client.generateAuthUrl({
+          state,
+          redirect_uri: redirectUri,
+          access_type: "offline",
+          scope: OAUTH_SCOPE,
+        })
 
-  yield* HttpRouter.empty.pipe(
-    HttpRouter.get(
-      "/oauth2callback",
-      Effect.gen(function* () {
-        const search = yield* HttpServerRequest.schemaSearchParams(ParamsSchema)
-
-        if (isFailureParams(search)) {
-          return yield* new OAuthError({
-            message: `${search.error} - ${search.error_description ?? "No additional details provided"}`,
-          })
-        }
-
-        if (state !== search.state) {
-          return yield* new OAuthError({
-            message: "Invalid state parameter. Possible CSRF attack.",
-          })
-        }
-
-        const result = yield* Effect.tryPromise({
-          try: () =>
-            client.getToken({
-              code: search.code,
-              redirect_uri: redirectUri,
-            }),
+        yield* Effect.tryPromise({
+          try: () => open(authUrl),
           catch: (error) =>
             new OAuthError({
-              message: `Failed to get token: ${JSON.stringify(error)}`,
+              _error: error,
+              message: "Failed to open browser",
             }),
         })
 
-        yield* Effect.log(result.tokens)
+        const serverFiber = yield* HttpRouter.empty.pipe(
+          HttpRouter.get(
+            "/oauth2callback",
+            Effect.gen(function* () {
+              const search =
+                yield* HttpServerRequest.schemaSearchParams(ParamsSchema)
 
-        return yield* HttpServerResponse.redirect(SIGN_IN_SUCCESS_URL)
-      }).pipe(
-        Effect.tapError((error) => Effect.logError(error.name, error.message)),
-        Effect.catchAll(() => HttpServerResponse.redirect(SIGN_IN_FAILURE_URL)),
-        Effect.ensuring(Deferred.succeed(finished, undefined)),
-      ),
-    ),
-    HttpServer.serveEffect(),
-  )
+              yield* Deferred.succeed(deferredParams, search)
 
-  yield* Deferred.await(finished)
-})
+              if (isFailureParams(search)) {
+                return yield* HttpServerResponse.redirect(SIGN_IN_FAILURE_URL)
+              }
 
-const ServerLive = BunHttpServer.layer({
-  port: 0,
-} satisfies Partial<Bun.Serve.Options<undefined, never>>)
+              return yield* HttpServerResponse.redirect(SIGN_IN_SUCCESS_URL)
+            }).pipe(
+              Effect.tapError(Effect.logError),
+              Effect.catchAll(() =>
+                HttpServerResponse.redirect(SIGN_IN_FAILURE_URL),
+              ),
+            ),
+          ),
+          HttpServer.serveEffect(),
+          Effect.forkScoped,
+        )
 
-BunRuntime.runMain(pipe(main, Effect.scoped, Effect.provide(ServerLive)))
+        yield* Deferred.await(deferredParams)
+        yield* Fiber.interrupt(serverFiber)
+      }),
+    }
+  },
+}) {}
+
+// if (isFailureParams(search)) {
+//   return (
+//     yield
+//     * new OAuthError({
+//       message: `${search.error} - ${search.error_description ?? "No additional details provided"}`,
+//     })
+//   )
+// }
+
+// if (state !== search.state) {
+//   return (
+//     yield
+//     * new OAuthError({
+//       message: "Invalid state parameter. Possible CSRF attack.",
+//     })
+//   )
+// }
+
+// const result =
+//   yield
+//   * Effect.tryPromise({
+//     try: () =>
+//       client.getToken({
+//         code: search.code,
+//         redirect_uri: redirectUri,
+//       }),
+//     catch: (error) =>
+//       new OAuthError({
+//         message: `Failed to get token: ${JSON.stringify(error)}`,
+//       }),
+//   })
+
+// yield * Effect.log(result.tokens)
+
+// return yield * HttpServerResponse.redirect(SIGN_IN_SUCCESS_URL)

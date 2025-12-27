@@ -10,8 +10,9 @@ export const main: Plugin = async (ctx) => {
           label: "OAuth with Google",
           authorize: async () => {
             return {
-              callback,
-              // idk theres more
+              url: "https://developers.google.com/gemini-code-assist/auth_success_gemini",
+              method: "auto",
+              callback: async () => {},
             }
           },
         },
