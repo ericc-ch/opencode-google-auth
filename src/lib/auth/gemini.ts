@@ -37,7 +37,7 @@ const isFailureParams = Schema.is(FailureParamsSchema)
 const ParamsSchema = Schema.Union(SuccessParamsSchema, FailureParamsSchema)
 
 class OAuthError extends Data.TaggedError("OAuthError")<{
-  readonly _error: unknown
+  readonly _error?: unknown
   readonly message: string
 }> {}
 
@@ -52,7 +52,10 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
       authenticate: Effect.fn(function* () {
         yield* HttpServer.logAddress
 
-        const deferredParams = yield* Deferred.make<typeof ParamsSchema.Type>()
+        const deferredParams = yield* Deferred.make<
+          typeof SuccessParamsSchema.Type,
+          OAuthError
+        >()
 
         const redirectUri = yield* HttpServer.addressFormattedWith((address) =>
           Effect.succeed(`${address}/oauth2callback`),
@@ -79,51 +82,41 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
           HttpRouter.get(
             "/oauth2callback",
             Effect.gen(function* () {
-              const search =
+              const params =
                 yield* HttpServerRequest.schemaSearchParams(ParamsSchema)
 
-              yield* Deferred.succeed(deferredParams, search)
-
-              if (isFailureParams(search)) {
-                return yield* HttpServerResponse.redirect(SIGN_IN_FAILURE_URL)
+              if (isFailureParams(params)) {
+                yield* Deferred.fail(
+                  deferredParams,
+                  new OAuthError({
+                    message: `${params.error} - ${params.error_description ?? "No additional details provided"}`,
+                  }),
+                )
+              } else {
+                yield* Deferred.succeed(deferredParams, params)
               }
 
-              return yield* HttpServerResponse.redirect(SIGN_IN_SUCCESS_URL)
-            }).pipe(
-              Effect.tapError(Effect.logError),
-              Effect.catchAll(() =>
-                HttpServerResponse.redirect(SIGN_IN_FAILURE_URL),
-              ),
-            ),
+              return yield* HttpServerResponse.text(
+                "You may now close this tab now.",
+              )
+            }).pipe(Effect.tapError(Effect.logError)),
           ),
           HttpServer.serveEffect(),
           Effect.forkScoped,
         )
 
-        yield* Deferred.await(deferredParams)
+        const search = yield* Deferred.await(deferredParams)
         yield* Fiber.interrupt(serverFiber)
+
+        if (state !== search.state) {
+          return yield* new OAuthError({
+            message: "Invalid state parameter. Possible CSRF attack.",
+          })
+        }
       }),
     }
   },
 }) {}
-
-// if (isFailureParams(search)) {
-//   return (
-//     yield
-//     * new OAuthError({
-//       message: `${search.error} - ${search.error_description ?? "No additional details provided"}`,
-//     })
-//   )
-// }
-
-// if (state !== search.state) {
-//   return (
-//     yield
-//     * new OAuthError({
-//       message: "Invalid state parameter. Possible CSRF attack.",
-//     })
-//   )
-// }
 
 // const result =
 //   yield
