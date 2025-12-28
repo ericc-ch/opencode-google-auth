@@ -4,8 +4,8 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "@effect/platform"
-import { Data, Deferred, Effect, Fiber, pipe, Schema } from "effect"
-import { OAuth2Client } from "google-auth-library"
+import { Data, Deferred, Effect, Fiber, Schema } from "effect"
+import { OAuth2Client, type Credentials } from "google-auth-library"
 import open from "open"
 
 const OAUTH_CLIENT_ID =
@@ -16,11 +16,6 @@ const OAUTH_SCOPE = [
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
 ]
-
-const SIGN_IN_SUCCESS_URL =
-  "https://developers.google.com/gemini-code-assist/auth_success_gemini"
-const SIGN_IN_FAILURE_URL =
-  "https://developers.google.com/gemini-code-assist/auth_failure_gemini"
 
 const SuccessParamsSchema = Schema.Struct({
   code: Schema.String,
@@ -113,25 +108,38 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
             message: "Invalid state parameter. Possible CSRF attack.",
           })
         }
+
+        const result = yield* Effect.tryPromise({
+          try: () =>
+            client.getToken({
+              code: search.code,
+              redirect_uri: redirectUri,
+            }),
+          catch: (error) =>
+            new OAuthError({
+              message: `Failed to get token: ${JSON.stringify(error)}`,
+            }),
+        })
+
+        return result.tokens
+      }),
+      refresh: Effect.fn(function* (tokens: Credentials) {
+        client.setCredentials(tokens)
+
+        const result = yield* Effect.tryPromise({
+          try: () => client.getAccessToken(),
+          catch: (error) =>
+            new OAuthError({
+              message: `Failed to get token: ${JSON.stringify(error)}`,
+            }),
+        })
+
+        if (result.token) return result.token
+
+        return yield* new OAuthError({
+          message: `Failed to get access token for some goddamn reason. ${JSON.stringify(result.res)}`,
+        })
       }),
     }
   },
 }) {}
-
-// const result =
-//   yield
-//   * Effect.tryPromise({
-//     try: () =>
-//       client.getToken({
-//         code: search.code,
-//         redirect_uri: redirectUri,
-//       }),
-//     catch: (error) =>
-//       new OAuthError({
-//         message: `Failed to get token: ${JSON.stringify(error)}`,
-//       }),
-//   })
-
-// yield * Effect.log(result.tokens)
-
-// return yield * HttpServerResponse.redirect(SIGN_IN_SUCCESS_URL)
