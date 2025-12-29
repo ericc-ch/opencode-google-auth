@@ -97,7 +97,7 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
             }).pipe(Effect.tapError(Effect.logError)),
           ),
           HttpServer.serveEffect(),
-          Effect.forkScoped,
+          Effect.fork,
         )
 
         const search = yield* Deferred.await(deferredParams)
@@ -122,7 +122,8 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
         })
 
         return result.tokens
-      }),
+      }, Effect.scoped),
+
       refresh: Effect.fn(function* (tokens: Credentials) {
         client.setCredentials(tokens)
 
