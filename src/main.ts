@@ -1,7 +1,7 @@
-import { BunHttpServer } from "@effect/platform-bun"
 import { FetchHttpClient, HttpClient } from "@effect/platform"
+import { BunHttpServer } from "@effect/platform-bun"
 import type { Plugin } from "@opencode-ai/plugin"
-import { Effect } from "effect"
+import { Effect, Exit, Layer, pipe, Scope } from "effect"
 import { GeminiOAuth } from "./lib/auth/gemini"
 import { Runtime } from "./lib/runtime"
 import fallbackModels from "./models.json"
@@ -65,7 +65,13 @@ export const main: Plugin = async (_ctx) => {
             const serverOptions = { port: 0 } satisfies Partial<
               Bun.Serve.Options<undefined, never>
             >
-            const Server = BunHttpServer.layerServer(serverOptions)
+            const serverScope = Effect.runSync(Scope.make())
+
+            const Server = await pipe(
+              BunHttpServer.layerServer(serverOptions),
+              Layer.buildWithScope(serverScope),
+              Effect.runPromise,
+            )
 
             const result = await Runtime.runPromise(
               Effect.gen(function* () {
@@ -84,7 +90,7 @@ export const main: Plugin = async (_ctx) => {
               callback: async () => {
                 const callbackResult = await Runtime.runPromise(
                   result.callback(),
-                )
+                ).finally(() => Scope.close(serverScope, Exit.void))
 
                 return {
                   access: callbackResult.access_token,

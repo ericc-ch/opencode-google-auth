@@ -127,8 +127,12 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
             Effect.forkIn(scope),
           )
 
+          yield* Effect.log("Started OAuth2 callback server")
+
           const callback = Effect.fn(function* () {
             const search = yield* Deferred.await(deferredParams)
+            yield* Effect.log("Received OAuth2 callback with params", search)
+
             yield* Fiber.interrupt(serverFiber)
 
             if (state !== search.state) {

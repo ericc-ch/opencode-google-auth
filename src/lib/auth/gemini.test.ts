@@ -8,7 +8,7 @@ import type { OAuth2Client } from "google-auth-library"
 import { GeminiOAuth, GoogleOAuth2Client, OAuthError } from "./gemini"
 
 const createMockClient = (overrides: Partial<OAuth2Client>) =>
-  overrides as unknown as typeof GoogleOAuth2Client.Service
+  overrides as typeof GoogleOAuth2Client.Service
 
 describe("GeminiOAuth", () => {
   describe("authenticate", () => {
