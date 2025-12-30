@@ -1,4 +1,4 @@
-import { BunContext } from "@effect/platform-bun"
 import { ManagedRuntime } from "effect"
+import { GeminiOAuth } from "./auth/gemini"
 
-export const Runtime = ManagedRuntime.make(BunContext.layer)
+export const Runtime = ManagedRuntime.make(GeminiOAuth.Default)

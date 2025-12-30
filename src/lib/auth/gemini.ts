@@ -31,20 +31,41 @@ const isFailureParams = Schema.is(FailureParamsSchema)
 
 const ParamsSchema = Schema.Union(SuccessParamsSchema, FailureParamsSchema)
 
-class OAuthError extends Data.TaggedError("OAuthError")<{
-  readonly _error?: unknown
+export class GoogleOAuth2Client extends Effect.Service<GoogleOAuth2Client>()(
+  "GoogleOAuth2Client",
+  {
+    sync: () =>
+      new OAuth2Client({
+        clientId: OAUTH_CLIENT_ID,
+        clientSecret: OAUTH_CLIENT_SECRET,
+      }),
+  },
+) {}
+
+export class OAuthError extends Data.TaggedError("OAuthError")<{
+  readonly reason:
+    | "browser"
+    | "callback"
+    | "state_mismatch"
+    | "token_exchange"
+    | "token_refresh"
   readonly message: string
+  readonly cause?: unknown
 }> {}
 
+export interface AuthenticateOptions {
+  openBrowser?: boolean
+}
+
 export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
-  sync: () => {
-    const client = new OAuth2Client({
-      clientId: OAUTH_CLIENT_ID,
-      clientSecret: OAUTH_CLIENT_SECRET,
-    })
+  dependencies: [GoogleOAuth2Client.Default],
+  scoped: Effect.gen(function* () {
+    const client = yield* GoogleOAuth2Client
 
     return {
-      authenticate: Effect.fn(function* () {
+      authenticate: Effect.fn(function* (options?: AuthenticateOptions) {
+        const openBrowser = options?.openBrowser ?? true
+
         yield* HttpServer.logAddress
 
         const deferredParams = yield* Deferred.make<
@@ -64,14 +85,17 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
           scope: OAUTH_SCOPE,
         })
 
-        yield* Effect.tryPromise({
-          try: () => open(authUrl),
-          catch: (error) =>
-            new OAuthError({
-              _error: error,
-              message: "Failed to open browser",
-            }),
-        })
+        if (openBrowser) {
+          yield* Effect.tryPromise({
+            try: () => open(authUrl),
+            catch: (cause) =>
+              new OAuthError({
+                reason: "browser",
+                message: "Failed to open browser",
+                cause,
+              }),
+          })
+        }
 
         const serverFiber = yield* HttpRouter.empty.pipe(
           HttpRouter.get(
@@ -84,6 +108,7 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
                 yield* Deferred.fail(
                   deferredParams,
                   new OAuthError({
+                    reason: "callback",
                     message: `${params.error} - ${params.error_description ?? "No additional details provided"}`,
                   }),
                 )
@@ -100,28 +125,38 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
           Effect.fork,
         )
 
-        const search = yield* Deferred.await(deferredParams)
-        yield* Fiber.interrupt(serverFiber)
+        const callback = Effect.fn(function* () {
+          const search = yield* Deferred.await(deferredParams)
+          yield* Fiber.interrupt(serverFiber)
 
-        if (state !== search.state) {
-          return yield* new OAuthError({
-            message: "Invalid state parameter. Possible CSRF attack.",
+          if (state !== search.state) {
+            return yield* new OAuthError({
+              reason: "state_mismatch",
+              message: "Invalid state parameter. Possible CSRF attack.",
+            })
+          }
+
+          const result = yield* Effect.tryPromise({
+            try: () =>
+              client.getToken({
+                code: search.code,
+                redirect_uri: redirectUri,
+              }),
+            catch: (cause) =>
+              new OAuthError({
+                reason: "token_exchange",
+                message: "Failed to exchange authorization code for tokens",
+                cause,
+              }),
           })
-        }
 
-        const result = yield* Effect.tryPromise({
-          try: () =>
-            client.getToken({
-              code: search.code,
-              redirect_uri: redirectUri,
-            }),
-          catch: (error) =>
-            new OAuthError({
-              message: `Failed to get token: ${JSON.stringify(error)}`,
-            }),
+          return result.tokens
         })
 
-        return result.tokens
+        return {
+          authUrl,
+          callback,
+        }
       }, Effect.scoped),
 
       refresh: Effect.fn(function* (tokens: Credentials) {
@@ -129,18 +164,21 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
 
         const result = yield* Effect.tryPromise({
           try: () => client.getAccessToken(),
-          catch: (error) =>
+          catch: (cause) =>
             new OAuthError({
-              message: `Failed to get token: ${JSON.stringify(error)}`,
+              reason: "token_refresh",
+              message: "Failed to refresh access token",
+              cause,
             }),
         })
 
         if (result.token) return result.token
 
         return yield* new OAuthError({
-          message: `Failed to get access token for some goddamn reason. ${JSON.stringify(result.res)}`,
+          reason: "token_refresh",
+          message: "Failed to get access token - no token returned",
         })
       }),
     }
-  },
+  }),
 }) {}
