@@ -7,7 +7,7 @@ Development Commands
 - Test: bun test
 - Single Test: bun test <path> (e.g., bun test src/lib/auth/gemini.test.ts)
 
-IMPORTANT: Always run bun run lint, bun run typecheck, and bun test after completing a task to ensure code quality.
+IMPORTANT: Always run bun run lint, bun run typecheck, and bun test after completing code tasks. For non-code tasks (e.g., documentation updates, config changes), running these is optional.
 
 Code Style & Guidelines
 
