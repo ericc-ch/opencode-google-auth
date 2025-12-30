@@ -1,18 +1,100 @@
+import { BunHttpServer } from "@effect/platform-bun"
+import { FetchHttpClient, HttpClient } from "@effect/platform"
 import type { Plugin } from "@opencode-ai/plugin"
+import { Effect } from "effect"
+import { GeminiOAuth } from "./lib/auth/gemini"
+import { Runtime } from "./lib/runtime"
+import fallbackModels from "./models.json"
 
-export const main: Plugin = async (ctx) => {
+const PROVIDER_NAME = "gemini-cli"
+
+const SUPPORTED_MODELS = [
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-3-pro-preview",
+  "gemini-3-flash-preview",
+]
+
+const fetchModels = Effect.gen(function* () {
+  const client = yield* HttpClient.HttpClient
+  const response = yield* client.get("https://models.dev/api.json")
+  const data = (yield* response.json) as Record<string, unknown>
+
+  return data.google as typeof fallbackModels
+}).pipe(
+  Effect.provide(FetchHttpClient.layer),
+  Effect.catchAll(() => Effect.succeed(fallbackModels)),
+)
+
+export const main: Plugin = async (_ctx) => {
+  const googleConfig = await Runtime.runPromise(fetchModels)
+
+  const filteredModels = Object.fromEntries(
+    Object.entries(googleConfig.models).filter(([key]) =>
+      SUPPORTED_MODELS.includes(key),
+    ),
+  )
+
   return {
+    config: async (config) => {
+      config.provider ??= {}
+
+      config.provider[PROVIDER_NAME] = {
+        ...googleConfig,
+        name: "Gemini CLI",
+        id: PROVIDER_NAME,
+        api: "https://cloudcode-pa.googleapis.com",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        models: filteredModels as any,
+      }
+    },
     auth: {
       provider: "gemini-cli",
+      loader: async (getAuth, _provider) => {
+        const auth = await getAuth()
+        if (auth.type !== "oauth") return {}
+
+        return {}
+      },
       methods: [
         {
           type: "oauth",
           label: "OAuth with Google",
           authorize: async () => {
+            const serverOptions = { port: 0 } satisfies Partial<
+              Bun.Serve.Options<undefined, never>
+            >
+            const Server = BunHttpServer.layerServer(serverOptions)
+
+            const result = await Runtime.runPromise(
+              Effect.gen(function* () {
+                const googleOAuth = yield* GeminiOAuth
+
+                return yield* googleOAuth.authenticate({
+                  openBrowser: true,
+                })
+              }).pipe(Effect.provide(Server)),
+            )
+
             return {
-              url: "https://developers.google.com/gemini-code-assist/auth_success_gemini",
+              url: result.authUrl,
               method: "auto",
-              callback: async () => {},
+              instructions: "Open that, dipshit",
+              callback: async () => {
+                const callbackResult = await Runtime.runPromise(
+                  result.callback(),
+                )
+
+                return {
+                  access: callbackResult.access_token,
+                  refresh: callbackResult.refresh_token,
+                  expires: callbackResult.expiry_date,
+                  type: "success",
+                  key: PROVIDER_NAME,
+                  provider: PROVIDER_NAME,
+                }
+              },
             }
           },
         },
