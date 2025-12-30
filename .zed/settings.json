@@ -8,5 +8,5 @@
       },
     },
   },
-  "file_scan_exclusions": [".git/", ".context/"],
+  "file_scan_exclusions": [".git/"],
 }
