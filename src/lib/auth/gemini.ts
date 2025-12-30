@@ -85,6 +85,7 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
             redirect_uri: redirectUri,
             access_type: "offline",
             scope: OAUTH_SCOPE,
+            prompt: "consent",
           })
 
           if (openBrowser) {

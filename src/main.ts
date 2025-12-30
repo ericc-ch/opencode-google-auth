@@ -45,17 +45,19 @@ export const main: Plugin = async (_ctx) => {
         name: "Gemini CLI",
         id: PROVIDER_NAME,
         api: "https://cloudcode-pa.googleapis.com",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         models: filteredModels as any,
       }
     },
     auth: {
       provider: "gemini-cli",
-      loader: async (getAuth, _provider) => {
+      loader: async (getAuth, provider) => {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
 
-        return {}
+        // I imagine we're gonna get the persisted tokens here
+        // Check expiry, refresh if needed, etc.
+
+        return {} satisfies Partial<typeof provider>
       },
       methods: [
         {
@@ -92,13 +94,20 @@ export const main: Plugin = async (_ctx) => {
                   result.callback(),
                 ).finally(() => Scope.close(serverScope, Exit.void))
 
+                const accessToken = callbackResult.access_token
+                const refreshToken = callbackResult.refresh_token
+                const expiryDate = callbackResult.expiry_date
+
+                if (!accessToken || !refreshToken || !expiryDate) {
+                  return { type: "failed" }
+                }
+
                 return {
-                  access: callbackResult.access_token,
-                  refresh: callbackResult.refresh_token,
-                  expires: callbackResult.expiry_date,
                   type: "success",
-                  key: PROVIDER_NAME,
                   provider: PROVIDER_NAME,
+                  access: accessToken,
+                  refresh: refreshToken,
+                  expires: expiryDate,
                 }
               },
             }

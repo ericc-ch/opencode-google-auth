@@ -237,3 +237,176 @@ const CODE_ASSIST_HEADERS = {
 | `.context/opencode-gemini-auth/src/plugin/request.ts`    | Request transformation |
 | `.context/opencode-gemini-auth/src/plugin/token.ts`      | Token refresh          |
 | `.context/gemini-cli/packages/core/src/config/models.ts` | Model definitions      |
+
+## Future: Opencode Context Service & Custom Logger
+
+### Overview
+
+Provide the opencode plugin context (`PluginInput`) as an Effect Service and implement a custom Effect Logger that sends logs to opencode's log endpoint.
+
+### Goals
+
+1. Create `OpencodeContext` Effect Service to hold the plugin input (`client`, `project`, `directory`, etc.)
+2. Create a custom Effect `Logger` that uses `client.app.log()` to send logs to opencode server
+3. Replace the default console-based logger with the opencode logger
+
+### Opencode SDK Log API
+
+The opencode SDK provides a log endpoint via `client.app.log()`:
+
+```typescript
+client.app.log({
+  service: string,      // Service name (e.g., "gemini-cli")
+  level: "debug" | "info" | "warn" | "error",
+  message: string,
+  extra?: Record<string, unknown>,  // Additional metadata
+})
+```
+
+Reference: `.context/opencode/packages/sdk/js/src/v2/gen/sdk.gen.ts:1983-2019`
+
+### Proposed Files
+
+| File                  | Purpose                                       |
+| --------------------- | --------------------------------------------- |
+| `src/lib/opencode.ts` | OpencodeContext Effect Service                |
+| `src/lib/logger.ts`   | Custom Logger using opencode SDK              |
+| `src/lib/runtime.ts`  | Updated to include OpencodeContext and Logger |
+
+### Implementation: OpencodeContext Service
+
+```typescript
+// src/lib/opencode.ts
+import { Context } from "effect"
+import type { PluginInput } from "@opencode-ai/plugin"
+
+export class OpencodeContext extends Context.Tag("OpencodeContext")<
+  OpencodeContext,
+  PluginInput
+>() {}
+```
+
+### Implementation: Custom Logger
+
+```typescript
+// src/lib/logger.ts
+import { Logger, LogLevel } from "effect"
+import type { PluginInput } from "@opencode-ai/plugin"
+
+const SERVICE_NAME = "gemini-cli"
+
+// Map Effect log levels to opencode log levels
+function mapLogLevel(
+  level: LogLevel.LogLevel,
+): "debug" | "info" | "warn" | "error" {
+  // Effect: All, Fatal, Error, Warning, Info, Debug, Trace, None
+  // Opencode: debug, info, warn, error
+  if (LogLevel.greaterThanEqual(level, LogLevel.Error)) return "error"
+  if (LogLevel.greaterThanEqual(level, LogLevel.Warning)) return "warn"
+  if (LogLevel.greaterThanEqual(level, LogLevel.Info)) return "info"
+  return "debug"
+}
+
+export const makeOpencodeLogger = (ctx: PluginInput) =>
+  Logger.make(({ logLevel, message, annotations }) => {
+    // Fire-and-forget async call
+    ctx.client.app.log({
+      service: SERVICE_NAME,
+      level: mapLogLevel(logLevel),
+      message: String(message),
+      extra: annotations ? Object.fromEntries(annotations) : undefined,
+    })
+  })
+```
+
+### Implementation: Updated Runtime
+
+```typescript
+// src/lib/runtime.ts
+import { ManagedRuntime, Layer, Logger } from "effect"
+import { GeminiOAuth } from "./auth/gemini"
+import { OpencodeContext } from "./opencode"
+import { makeOpencodeLogger } from "./logger"
+import type { PluginInput } from "@opencode-ai/plugin"
+
+// Create runtime with opencode context
+export const makeRuntime = (pluginInput: PluginInput) => {
+  const OpencodeLayer = Layer.succeed(OpencodeContext, pluginInput)
+  const LoggerLayer = Logger.replace(
+    Logger.defaultLogger,
+    makeOpencodeLogger(pluginInput),
+  )
+
+  return ManagedRuntime.make(
+    Layer.mergeAll(GeminiOAuth.Default, OpencodeLayer, LoggerLayer),
+  )
+}
+
+// Legacy runtime for use outside plugin context (e.g., tests)
+export const Runtime = ManagedRuntime.make(GeminiOAuth.Default)
+```
+
+### Implementation: Updated main.ts
+
+```typescript
+// src/main.ts (partial)
+export const main: Plugin = async (ctx) => {
+  const runtime = makeRuntime(ctx)
+  const googleConfig = await runtime.runPromise(fetchModels)
+
+  // ... rest of plugin
+}
+```
+
+### Open Questions
+
+1. **Logger async handling**: Effect's `Logger.make` callback is synchronous, but `client.app.log()` is async.
+   Options:
+   - **Fire-and-forget**: Call async log without awaiting (logs may be lost on crash)
+   - **Queue-based**: Buffer logs and flush periodically
+   - **Effect.runFork**: Fire off async effect in a fiber (non-blocking)
+
+2. **Runtime lifecycle**: Should we dispose the runtime when plugin unloads? Current static runtime doesn't handle this.
+
+3. **Service access pattern**: How to access opencode client within Effect code?
+   - Direct: `const ctx = yield* OpencodeContext; ctx.client.app.log(...)`
+   - Abstracted: `yield* OpencodeLog.info("message", { extra: "data" })`
+
+### Effect Logger API Reference
+
+```typescript
+// Creating a custom logger
+Logger.make<Message, Output>(
+  (options: {
+    fiberId: FiberId.FiberId
+    logLevel: LogLevel.LogLevel
+    message: Message
+    cause: Cause.Cause<unknown>
+    context: FiberRefs.FiberRefs
+    spans: List.List<LogSpan.LogSpan>
+    annotations: HashMap.HashMap<string, unknown>
+    date: Date
+  }) => Output,
+)
+
+// Replacing default logger in a Layer
+Logger.replace(Logger.defaultLogger, customLogger)
+
+// Using in Effect code
+Effect.log("info message")
+Effect.logDebug("debug message")
+Effect.logWarning("warning message")
+Effect.logError("error message")
+Effect.logInfo("message").pipe(Effect.annotateLogs({ key: "value" }))
+```
+
+### Status
+
+| Task                    | Status |
+| ----------------------- | ------ |
+| Design document         | DONE   |
+| OpencodeContext service | TODO   |
+| Custom logger           | TODO   |
+| Runtime integration     | TODO   |
+| main.ts update          | TODO   |
+| Decide async handling   | TODO   |
