@@ -18,8 +18,8 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/main.d.ts",
-      "default": "./dist/main.js"
+      "types": "./dist/main.d.mts",
+      "default": "./dist/main.mjs"
     }
   },
   "bin": {
@@ -30,7 +30,7 @@
     "src"
   ],
   "scripts": {
-    "prebuild": "bun run scripts/fetch-models.ts",
+    "prebuild": "bun ./scripts/fetch-models.ts",
     "build": "tsdown",
     "predeploy": "bun run build",
     "deploy": "bun ./scripts/deploy.ts",
