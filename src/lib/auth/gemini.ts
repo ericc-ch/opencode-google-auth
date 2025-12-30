@@ -4,7 +4,7 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "@effect/platform"
-import { Data, Deferred, Effect, Fiber, Schema } from "effect"
+import { Data, Deferred, Effect, Fiber, Schema, Scope } from "effect"
 import { OAuth2Client, type Credentials } from "google-auth-library"
 import open from "open"
 
@@ -61,103 +61,107 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
   dependencies: [GoogleOAuth2Client.Default],
   scoped: Effect.gen(function* () {
     const client = yield* GoogleOAuth2Client
+    const scope = yield* Effect.scope
 
     return {
-      authenticate: Effect.fn(function* (options?: AuthenticateOptions) {
-        const openBrowser = options?.openBrowser ?? true
+      authenticate: Effect.fn(
+        function* (options?: AuthenticateOptions) {
+          const openBrowser = options?.openBrowser ?? true
 
-        yield* HttpServer.logAddress
+          yield* HttpServer.logAddress
 
-        const deferredParams = yield* Deferred.make<
-          typeof SuccessParamsSchema.Type,
-          OAuthError
-        >()
+          const deferredParams = yield* Deferred.make<
+            typeof SuccessParamsSchema.Type,
+            OAuthError
+          >()
 
-        const redirectUri = yield* HttpServer.addressFormattedWith((address) =>
-          Effect.succeed(`${address}/oauth2callback`),
-        )
-        const state = crypto.randomUUID()
+          const redirectUri = yield* HttpServer.addressFormattedWith(
+            (address) => Effect.succeed(`${address}/oauth2callback`),
+          )
+          const state = crypto.randomUUID()
 
-        const authUrl = client.generateAuthUrl({
-          state,
-          redirect_uri: redirectUri,
-          access_type: "offline",
-          scope: OAUTH_SCOPE,
-        })
-
-        if (openBrowser) {
-          yield* Effect.tryPromise({
-            try: () => open(authUrl),
-            catch: (cause) =>
-              new OAuthError({
-                reason: "browser",
-                message: "Failed to open browser",
-                cause,
-              }),
+          const authUrl = client.generateAuthUrl({
+            state,
+            redirect_uri: redirectUri,
+            access_type: "offline",
+            scope: OAUTH_SCOPE,
           })
-        }
 
-        const serverFiber = yield* HttpRouter.empty.pipe(
-          HttpRouter.get(
-            "/oauth2callback",
-            Effect.gen(function* () {
-              const params =
-                yield* HttpServerRequest.schemaSearchParams(ParamsSchema)
-
-              if (isFailureParams(params)) {
-                yield* Deferred.fail(
-                  deferredParams,
-                  new OAuthError({
-                    reason: "callback",
-                    message: `${params.error} - ${params.error_description ?? "No additional details provided"}`,
-                  }),
-                )
-              } else {
-                yield* Deferred.succeed(deferredParams, params)
-              }
-
-              return yield* HttpServerResponse.text(
-                "You may now close this tab now.",
-              )
-            }).pipe(Effect.tapError(Effect.logError)),
-          ),
-          HttpServer.serveEffect(),
-          Effect.fork,
-        )
-
-        const callback = Effect.fn(function* () {
-          const search = yield* Deferred.await(deferredParams)
-          yield* Fiber.interrupt(serverFiber)
-
-          if (state !== search.state) {
-            return yield* new OAuthError({
-              reason: "state_mismatch",
-              message: "Invalid state parameter. Possible CSRF attack.",
+          if (openBrowser) {
+            yield* Effect.tryPromise({
+              try: () => open(authUrl),
+              catch: (cause) =>
+                new OAuthError({
+                  reason: "browser",
+                  message: "Failed to open browser",
+                  cause,
+                }),
             })
           }
 
-          const result = yield* Effect.tryPromise({
-            try: () =>
-              client.getToken({
-                code: search.code,
-                redirect_uri: redirectUri,
-              }),
-            catch: (cause) =>
-              new OAuthError({
-                reason: "token_exchange",
-                message: "Failed to exchange authorization code for tokens",
-                cause,
-              }),
+          const serverFiber = yield* HttpRouter.empty.pipe(
+            HttpRouter.get(
+              "/oauth2callback",
+              Effect.gen(function* () {
+                const params =
+                  yield* HttpServerRequest.schemaSearchParams(ParamsSchema)
+
+                if (isFailureParams(params)) {
+                  yield* Deferred.fail(
+                    deferredParams,
+                    new OAuthError({
+                      reason: "callback",
+                      message: `${params.error} - ${params.error_description ?? "No additional details provided"}`,
+                    }),
+                  )
+                } else {
+                  yield* Deferred.succeed(deferredParams, params)
+                }
+
+                return yield* HttpServerResponse.text(
+                  "You may now close this tab now.",
+                )
+              }).pipe(Effect.tapError(Effect.logError)),
+            ),
+            HttpServer.serveEffect(),
+            Effect.forkIn(scope),
+          )
+
+          const callback = Effect.fn(function* () {
+            const search = yield* Deferred.await(deferredParams)
+            yield* Fiber.interrupt(serverFiber)
+
+            if (state !== search.state) {
+              return yield* new OAuthError({
+                reason: "state_mismatch",
+                message: "Invalid state parameter. Possible CSRF attack.",
+              })
+            }
+
+            const result = yield* Effect.tryPromise({
+              try: () =>
+                client.getToken({
+                  code: search.code,
+                  redirect_uri: redirectUri,
+                }),
+              catch: (cause) =>
+                new OAuthError({
+                  reason: "token_exchange",
+                  message: "Failed to exchange authorization code for tokens",
+                  cause,
+                }),
+            })
+
+            return result.tokens
           })
 
-          return result.tokens
-        })
-
-        return {
-          authUrl,
-          callback,
-        }
-      }, Effect.scoped),
+          return {
+            authUrl,
+            callback,
+          }
+        },
+        Effect.provideService(Scope.Scope, scope),
+      ),
 
       refresh: Effect.fn(function* (tokens: Credentials) {
         client.setCredentials(tokens)

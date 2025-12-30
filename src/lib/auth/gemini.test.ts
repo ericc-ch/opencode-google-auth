@@ -43,17 +43,17 @@ describe("GeminiOAuth", () => {
           const oauth = yield* GeminiOAuth
           const client = yield* HttpClient.HttpClient
 
-          const authenticateFiber = yield* Effect.fork(
-            oauth.authenticate({ openBrowser: false }),
-          )
+          const { authUrl, callback } = yield* oauth.authenticate({
+            openBrowser: false,
+          })
 
-          yield* Effect.sleep("100 millis")
+          expect(authUrl).toBe("https://mock-auth-url.com")
 
           yield* client.get(
             `/oauth2callback?code=test_code&state=${capturedState}`,
           )
 
-          return yield* authenticateFiber
+          return yield* callback()
         }).pipe(
           Effect.scoped,
           Effect.provide(
@@ -81,17 +81,15 @@ describe("GeminiOAuth", () => {
           const oauth = yield* GeminiOAuth
           const client = yield* HttpClient.HttpClient
 
-          const authenticateFiber = yield* Effect.fork(
-            oauth.authenticate({ openBrowser: false }),
-          )
-
-          yield* Effect.sleep("100 millis")
+          const { callback } = yield* oauth.authenticate({
+            openBrowser: false,
+          })
 
           yield* client.get(
             "/oauth2callback?error=access_denied&error_description=User%20denied%20access",
           )
 
-          return yield* authenticateFiber
+          return yield* callback()
         }).pipe(
           Effect.scoped,
           Effect.provide(
@@ -132,15 +130,13 @@ describe("GeminiOAuth", () => {
           const oauth = yield* GeminiOAuth
           const client = yield* HttpClient.HttpClient
 
-          const authenticateFiber = yield* Effect.fork(
-            oauth.authenticate({ openBrowser: false }),
-          )
-
-          yield* Effect.sleep("100 millis")
+          const { callback } = yield* oauth.authenticate({
+            openBrowser: false,
+          })
 
           yield* client.get("/oauth2callback?code=test_code&state=wrong_state")
 
-          return yield* authenticateFiber
+          return yield* callback()
         }).pipe(
           Effect.scoped,
           Effect.provide(
@@ -181,17 +177,15 @@ describe("GeminiOAuth", () => {
           const oauth = yield* GeminiOAuth
           const client = yield* HttpClient.HttpClient
 
-          const authenticateFiber = yield* Effect.fork(
-            oauth.authenticate({ openBrowser: false }),
-          )
-
-          yield* Effect.sleep("100 millis")
+          const { callback } = yield* oauth.authenticate({
+            openBrowser: false,
+          })
 
           yield* client.get(
             `/oauth2callback?code=test_code&state=${capturedState}`,
           )
 
-          return yield* authenticateFiber
+          return yield* callback()
         }).pipe(
           Effect.scoped,
           Effect.provide(
