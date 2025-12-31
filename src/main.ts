@@ -35,14 +35,14 @@ export const main: Plugin = async (context) => {
 
       config.provider[SERVICE_NAME] = {
         ...googleConfig,
-        name: "Gemini CLI",
         id: SERVICE_NAME,
+        name: "Gemini CLI",
         api: "https://cloudcode-pa.googleapis.com",
         models: filteredModels as any,
       }
     },
     auth: {
-      provider: "gemini-cli",
+      provider: SERVICE_NAME,
       loader: async (getAuth, provider) => {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}

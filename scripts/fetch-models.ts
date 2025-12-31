@@ -1,16 +1,9 @@
 #!/usr/bin/env bun
 
 import path from "node:path"
+import { SUPPORTED_MODELS } from "../src/lib/config"
 
 const MODELS_DEV_URL = "https://models.dev/api.json"
-
-const SUPPORTED_MODELS = [
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-3-pro-preview",
-  "gemini-3-flash-preview",
-]
 
 const rootDir = path.join(import.meta.dir, "..")
 const outputPath = path.join(rootDir, "src", "models.json")
