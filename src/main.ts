@@ -3,18 +3,9 @@ import { BunHttpServer } from "@effect/platform-bun"
 import type { Plugin } from "@opencode-ai/plugin"
 import { Effect, Exit, Layer, pipe, Scope } from "effect"
 import { GeminiOAuth } from "./lib/auth/gemini"
-import { Runtime } from "./lib/runtime"
+import { makeRuntime } from "./lib/runtime"
 import fallbackModels from "./models.json"
-
-const PROVIDER_NAME = "gemini-cli"
-
-const SUPPORTED_MODELS = [
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-3-pro-preview",
-  "gemini-3-flash-preview",
-]
+import { SERVICE_NAME, SUPPORTED_MODELS } from "./lib/config"
 
 const fetchModels = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
@@ -27,23 +18,25 @@ const fetchModels = Effect.gen(function* () {
   Effect.catchAll(() => Effect.succeed(fallbackModels)),
 )
 
-export const main: Plugin = async (_ctx) => {
-  const googleConfig = await Runtime.runPromise(fetchModels)
+export const main: Plugin = async (context) => {
+  const runtime = makeRuntime(context)
+  const googleConfig = await runtime.runPromise(fetchModels)
 
-  const filteredModels = Object.fromEntries(
-    Object.entries(googleConfig.models).filter(([key]) =>
-      SUPPORTED_MODELS.includes(key),
-    ),
+  const filteredModels: typeof googleConfig.models = pipe(
+    googleConfig.models,
+    Object.entries,
+    (entries) => entries.filter(([key]) => SUPPORTED_MODELS.includes(key)),
+    Object.fromEntries,
   )
 
   return {
     config: async (config) => {
       config.provider ??= {}
 
-      config.provider[PROVIDER_NAME] = {
+      config.provider[SERVICE_NAME] = {
         ...googleConfig,
         name: "Gemini CLI",
-        id: PROVIDER_NAME,
+        id: SERVICE_NAME,
         api: "https://cloudcode-pa.googleapis.com",
         models: filteredModels as any,
       }
@@ -75,7 +68,7 @@ export const main: Plugin = async (_ctx) => {
               Effect.runPromise,
             )
 
-            const result = await Runtime.runPromise(
+            const result = await runtime.runPromise(
               Effect.gen(function* () {
                 const googleOAuth = yield* GeminiOAuth
 
@@ -90,9 +83,9 @@ export const main: Plugin = async (_ctx) => {
               method: "auto",
               instructions: "Open that, dipshit",
               callback: async () => {
-                const callbackResult = await Runtime.runPromise(
-                  result.callback(),
-                ).finally(() => Scope.close(serverScope, Exit.void))
+                const callbackResult = await runtime
+                  .runPromise(result.callback())
+                  .finally(() => Scope.close(serverScope, Exit.void))
 
                 const accessToken = callbackResult.access_token
                 const refreshToken = callbackResult.refresh_token
@@ -104,7 +97,7 @@ export const main: Plugin = async (_ctx) => {
 
                 return {
                   type: "success",
-                  provider: PROVIDER_NAME,
+                  provider: SERVICE_NAME,
                   access: accessToken,
                   refresh: refreshToken,
                   expires: expiryDate,
