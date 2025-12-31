@@ -1,11 +1,13 @@
+import type { GoogleGenerativeAIProviderSettings } from "@ai-sdk/google"
 import { FetchHttpClient, HttpClient } from "@effect/platform"
 import { BunHttpServer } from "@effect/platform-bun"
 import type { Plugin } from "@opencode-ai/plugin"
 import { Effect, Exit, Layer, pipe, Scope } from "effect"
 import { GeminiOAuth } from "./lib/auth/gemini"
+import { SERVICE_NAME, SUPPORTED_MODELS } from "./lib/config"
 import { makeRuntime } from "./lib/runtime"
 import fallbackModels from "./models.json"
-import { SERVICE_NAME, SUPPORTED_MODELS } from "./lib/config"
+import { makeFetch } from "./lib/fetch"
 
 const fetchModels = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
@@ -43,14 +45,19 @@ export const main: Plugin = async (context) => {
     },
     auth: {
       provider: SERVICE_NAME,
-      loader: async (getAuth, provider) => {
+      loader: async (getAuth) => {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
 
         // I imagine we're gonna get the persisted tokens here
         // Check expiry, refresh if needed, etc.
 
-        return {} satisfies Partial<typeof provider>
+        return {
+          fetch: (async (input, init) => {
+            const response = await runtime.runPromise(makeFetch(input, init))
+            return response
+          }) as typeof fetch,
+        } satisfies GoogleGenerativeAIProviderSettings
       },
       methods: [
         {
@@ -68,14 +75,11 @@ export const main: Plugin = async (context) => {
               Effect.runPromise,
             )
 
-            const result = await runtime.runPromise(
-              Effect.gen(function* () {
-                const googleOAuth = yield* GeminiOAuth
-
-                return yield* googleOAuth.authenticate({
-                  openBrowser: true,
-                })
-              }).pipe(Effect.provide(Server)),
+            const result = await pipe(
+              GeminiOAuth,
+              Effect.andThen((oauth) => oauth.authenticate()),
+              Effect.provide(Server),
+              runtime.runPromise,
             )
 
             return {

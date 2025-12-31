@@ -128,29 +128,140 @@ Key endpoints:
 
 ### 2. Implement Request Transform (`src/lib/request/transform.ts`)
 
-Create pure functions for:
+Pure functions to bridge the AI SDK's standard Gemini API format to Cloud Code Assist format.
+
+#### Why We Need This
+
+The `@ai-sdk/google` SDK sends requests in standard Gemini API format, but we're hitting Cloud Code Assist which expects a different format:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  AI SDK sends (standard Gemini API format)                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  POST /v1beta/models/gemini-2.5-flash:streamGenerateContent                 │
+│  Headers: x-goog-api-key: ""                                                │
+│  Body: { "contents": [...], "generationConfig": {...} }                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼  customFetch transforms
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Cloud Code Assist expects                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  POST /v1internal:streamGenerateContent?alt=sse                             │
+│  Headers: Authorization: Bearer <token>                                     │
+│  Body: { "project": "...", "model": "...", "request": { contents, ... } }   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼  fetch() executes
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Cloud Code Assist returns                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  { "response": { "candidates": [...], "usageMetadata": {...} } }            │
+│  SSE: data: {"response": {...}}                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼  customFetch transforms back
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  AI SDK expects (standard format)                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  { "candidates": [...], "usageMetadata": {...} }                            │
+│  SSE: data: {...}                                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Functions to Implement
 
 ```typescript
-// Transform URL path
-// /v1beta/models/{model}:generateContent -> /v1internal:generateContent?alt=sse
-const transformPath: (url: URL) => URL
+/**
+ * Parse URL to extract model and action, determine if streaming.
+ * Returns null if URL doesn't match expected pattern.
+ *
+ * @example
+ * parseRequestUrl("/v1beta/models/gemini-2.5-flash:streamGenerateContent")
+ * // => { model: "gemini-2.5-flash", action: "streamGenerateContent", streaming: true }
+ */
+function parseRequestUrl(url: string): {
+  model: string
+  action: string
+  streaming: boolean
+} | null
 
-// Transform request body
-// { contents, ... } -> { project, model, request: { contents, ... } }
-const transformRequestBody: (
-  body: unknown,
-  project: string,
+/**
+ * Build the Cloud Code Assist URL path.
+ *
+ * @example
+ * buildCodeAssistPath("streamGenerateContent", true)
+ * // => "/v1internal:streamGenerateContent?alt=sse"
+ *
+ * buildCodeAssistPath("generateContent", false)
+ * // => "/v1internal:generateContent"
+ */
+function buildCodeAssistPath(action: string, streaming: boolean): string
+
+/**
+ * Wrap request body in Cloud Code Assist format.
+ *
+ * @example
+ * wrapRequestBody(
+ *   { contents: [...], generationConfig: {...} },
+ *   "my-project-id",
+ *   "gemini-2.5-flash"
+ * )
+ * // => {
+ * //   project: "my-project-id",
+ * //   model: "gemini-2.5-flash",
+ * //   request: { contents: [...], generationConfig: {...} }
+ * // }
+ */
+function wrapRequestBody(
+  body: Record<string, unknown>,
+  projectId: string,
   model: string,
-) => unknown
+): { project: string; model: string; request: Record<string, unknown> }
 
-// Transform response body (JSON)
-// { response: { candidates } } -> { candidates }
-const transformResponseBody: (body: unknown) => unknown
+/**
+ * Unwrap response body from Cloud Code Assist format.
+ * If body has { response: X }, return X. Otherwise return as-is.
+ *
+ * @example
+ * unwrapResponseBody({ response: { candidates: [...] } })
+ * // => { candidates: [...] }
+ *
+ * unwrapResponseBody({ candidates: [...] })
+ * // => { candidates: [...] }  (already unwrapped, return as-is)
+ */
+function unwrapResponseBody(body: unknown): unknown
 
-// Transform SSE stream
-// data: {"response":{...}} -> data: {...}
-const transformStreamChunk: (chunk: string) => string
+/**
+ * Transform a single SSE line, unwrapping the response field.
+ * Only transforms lines starting with "data:".
+ *
+ * @example
+ * transformStreamLine('data: {"response":{"candidates":[...]}}')
+ * // => 'data: {"candidates":[...]}'
+ *
+ * transformStreamLine('event: message')
+ * // => 'event: message'  (non-data lines pass through)
+ */
+function transformStreamLine(line: string): string
+
+/**
+ * Create a TransformStream that unwraps SSE response fields line-by-line.
+ * Handles buffering for partial lines across chunks.
+ *
+ * Usage in customFetch:
+ *   const transformed = response.body.pipeThrough(createStreamTransformer())
+ *   return new Response(transformed, { ... })
+ */
+function createStreamTransformer(): TransformStream<Uint8Array, Uint8Array>
 ```
+
+#### Implementation Notes
+
+1. **URL Pattern**: Match `/v1beta/models/([^:]+):(\w+)` to extract model and action
+2. **Streaming Detection**: `action === "streamGenerateContent"`
+3. **Model Fallbacks**: Optional, can add later. Reference uses `gemini-2.5-flash-image` → `gemini-2.5-flash`
+4. **Stream Transform**: Use `TextDecoderStream` + line splitting + `TextEncoderStream`
 
 Reference: `.context/opencode-gemini-auth/src/plugin/request.ts`
 
@@ -211,14 +322,21 @@ loadCodeAssist API -> Check if user has project
 
 ## Constants
 
-```typescript
-const GEMINI_CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com"
+Add to `src/lib/config.ts`:
 
-const CODE_ASSIST_HEADERS = {
+```typescript
+export const GEMINI_CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com"
+
+export const CODE_ASSIST_HEADERS = {
   "User-Agent": "google-api-nodejs-client/9.15.1",
   "X-Goog-Api-Client": "gl-node/22.17.0",
   "Client-Metadata":
     "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
+} as const
+
+// Optional: model name remapping for unsupported variants
+export const MODEL_FALLBACKS: Record<string, string> = {
+  "gemini-2.5-flash-image": "gemini-2.5-flash",
 }
 ```
 

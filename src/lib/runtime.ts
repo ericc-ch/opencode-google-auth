@@ -7,7 +7,7 @@ import path from "node:path"
 import { PlatformLogger } from "@effect/platform"
 import { BunFileSystem } from "@effect/platform-bun"
 
-const logPath = path.join(import.meta.dir, `${SERVICE_NAME}.log`)
+const logPath = path.join(import.meta.dir, `${SERVICE_NAME}.txt`)
 
 export const makeRuntime = (context: PluginInput) => {
   const OpenCodeLive = Layer.succeed(OpenCodeContext, context)

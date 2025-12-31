@@ -1,5 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { Context, Effect, Logger, LogLevel } from "effect"
+import { Context, Effect, Inspectable, Logger, LogLevel } from "effect"
 import { SERVICE_NAME } from "./config"
 
 export class OpenCodeContext extends Context.Tag("OpenCodeContext")<
@@ -15,7 +15,7 @@ type OpenCodeLogLevel =
   >["level"]
 
 export const makeOpenCodeLogger = Effect.gen(function* () {
-  const opencode = yield* OpenCodeContext
+  const openCode = yield* OpenCodeContext
 
   return Logger.make((log) => {
     let level: OpenCodeLogLevel = "debug"
@@ -31,10 +31,12 @@ export const makeOpenCodeLogger = Effect.gen(function* () {
       level = "error"
     }
 
-    void opencode.client.app.log({
+    const message = Inspectable.toStringUnknown(log.message)
+
+    void openCode.client.app.log({
       body: {
         level,
-        message: String(log.message),
+        message,
         service: SERVICE_NAME,
       },
     })
