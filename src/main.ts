@@ -7,7 +7,7 @@ import { GeminiOAuth } from "./lib/auth/gemini"
 import { SERVICE_NAME, SUPPORTED_MODELS } from "./lib/config"
 import { makeRuntime } from "./lib/runtime"
 import fallbackModels from "./models.json"
-import { makeFetch } from "./lib/fetch"
+import { fetchEffect } from "./lib/fetch"
 
 const fetchModels = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
@@ -53,8 +53,16 @@ export const main: Plugin = async (context) => {
         // Check expiry, refresh if needed, etc.
 
         return {
+          apiKey: "not needed probably",
           fetch: (async (input, init) => {
-            const response = await runtime.runPromise(makeFetch(input, init))
+            await context.client.app.log({
+              body: {
+                level: "debug",
+                message: "anjir lah",
+                service: "geminicli",
+              },
+            })
+            const response = await runtime.runPromise(fetchEffect(input, init))
             return response
           }) as typeof fetch,
         } satisfies GoogleGenerativeAIProviderSettings

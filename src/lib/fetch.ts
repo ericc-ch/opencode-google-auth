@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 
-export const makeFetch = Effect.fn(function* (
+export const fetchEffect = Effect.fn(function* (
   input: string | URL | Request,
   init?: BunFetchRequestInit,
 ) {
