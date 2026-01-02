@@ -13,9 +13,9 @@ OpenCode plugin for Gemini OAuth authentication using Google's Cloud Code Assist
 | Config hook with models          | DONE        | Fetches from models.dev, falls back to static |
 | Static models fallback           | DONE        | `src/models.json` + `scripts/fetch-models.ts` |
 | OAuth flow                       | DONE        | `src/lib/auth/gemini.ts` with Effect          |
-| Token refresh                    | DONE        | `GeminiOAuth.refresh()` method                |
+| Token refresh                    | DONE        | Built into `loadCodeAssist` with auto-persist |
+| Project context (loadCodeAssist) | DONE        | `src/lib/project.ts` with token refresh       |
 | Loader function                  | IN PROGRESS | Stub returns `{}`, needs customFetch          |
-| Project context (loadCodeAssist) | TODO        | `src/lib/auth/project.ts`                     |
 | Request/response transformation  | TODO        | `src/lib/request/transform.ts`                |
 | customFetch implementation       | TODO        | Transform requests for Cloud Code Assist API  |
 
@@ -35,10 +35,8 @@ OpenCode plugin for Gemini OAuth authentication using Google's Cloud Code Assist
 |  2. loader() (runs once per session when auth is OAuth)   TODO  |
 |     - Check auth.type === "oauth", else return {}               |
 |     - Set all model costs to 0 (free tier)                      |
-|     - Fetch project context (Effect):                           |
-|       - loadCodeAssist() -> get existing project                |
-|       - If none + FREE tier -> onboardUser() -> create one      |
-|       - If none + non-FREE -> throw ProjectIdRequiredError      |
+|     - Call loadCodeAssist() -> get projectId                    |
+|       (token refresh handled internally)                        |
 |     - Return { apiKey: "", fetch: customFetch }                 |
 |       where customFetch captures projectId in closure           |
 +--------------------------------+--------------------------------+
@@ -47,8 +45,6 @@ OpenCode plugin for Gemini OAuth authentication using Google's Cloud Code Assist
 +-----------------------------------------------------------------+
 |  3. customFetch (runs on each API request)                TODO  |
 |     - Get latest auth via getAuth()                             |
-|     - If token expired -> refresh (Effect) -> persist via       |
-|       ctx.client.auth.set()                                     |
 |     - Transform request:                                        |
 |       - Path: /v1beta/models/X:action -> /v1internal:action     |
 |       - Body: wrap in { project, model, request }               |
@@ -66,16 +62,17 @@ OpenCode plugin for Gemini OAuth authentication using Google's Cloud Code Assist
 | ------------------------------ | ------ | ------------------------------------------------- |
 | `src/main.ts`                  | DONE   | Plugin entry with config hook + OAuth methods     |
 | `src/lib/auth/gemini.ts`       | DONE   | OAuth flow + token refresh (Effect service)       |
+| `src/lib/project.ts`           | DONE   | loadCodeAssist with built-in token refresh        |
 | `src/lib/runtime.ts`           | DONE   | Effect runtime with OpenCode logger + file logger |
 | `src/lib/opencode.ts`          | DONE   | OpenCodeContext service + custom Effect logger    |
+| `src/lib/config.ts`            | DONE   | Constants for endpoints, client metadata          |
 | `src/models.json`              | DONE   | Static fallback for models.dev data               |
 | `scripts/fetch-models.ts`      | DONE   | Prebuild script to update models.json             |
-| `src/lib/auth/project.ts`      | TODO   | Project context: loadCodeAssist, onboardUser      |
 | `src/lib/request/transform.ts` | TODO   | Request/response transformation (pure functions)  |
 
 ## Implemented Features
 
-### Config Hook (`src/main.ts:40-51`)
+### Config Hook (`src/main.ts`)
 
 - Fetches model definitions from `https://models.dev/api.json` using Effect HttpClient
 - Falls back to static `src/models.json` if fetch fails
@@ -104,29 +101,7 @@ OpenCode plugin for Gemini OAuth authentication using Google's Cloud Code Assist
 
 ## Remaining Work
 
-### 1. Implement Project Context (`src/lib/auth/project.ts`)
-
-Create Effect functions for:
-
-```typescript
-// Fetch existing project context
-const loadCodeAssist: Effect<ProjectContext, ProjectError>
-
-// Create managed project for FREE tier users
-const onboardUser: Effect<ProjectContext, ProjectError>
-
-// Combined: try load, then onboard if FREE tier
-const ensureProjectContext: Effect<ProjectContext, ProjectError>
-```
-
-Reference: `.context/opencode-gemini-auth/src/plugin/project.ts`
-
-Key endpoints:
-
-- `POST https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist`
-- `POST https://cloudcode-pa.googleapis.com/v1internal:onboardUser`
-
-### 2. Implement Request Transform (`src/lib/request/transform.ts`)
+### 1. Implement Request Transform (`src/lib/request/transform.ts`)
 
 Pure functions to bridge the AI SDK's standard Gemini API format to Cloud Code Assist format.
 
@@ -265,18 +240,42 @@ function createStreamTransformer(): TransformStream<Uint8Array, Uint8Array>
 
 Reference: `.context/opencode-gemini-auth/src/plugin/request.ts`
 
-### 3. Implement customFetch in Loader (`src/main.ts`)
+### 2. Implement customFetch in Loader (`src/main.ts`)
 
 Update loader function to:
 
 1. Check `auth.type === "oauth"`, else return `{}`
-2. Call `ensureProjectContext()` to get project ID
+2. Call `loadCodeAssist(tokens)` to get project context
 3. Return `{ apiKey: "", fetch: customFetch }` where customFetch:
    - Gets latest auth via `getAuth()`
-   - Checks token expiry, refreshes if needed
    - Transforms request (path, body, headers)
    - Executes fetch
    - Transforms response
+
+#### Usage in loader (main.ts)
+
+```typescript
+import { loadCodeAssist } from "./lib/project"
+import { runtime } from "./lib/runtime"
+
+// In loader function:
+const tokens: Credentials = {
+  access_token: auth.access,
+  refresh_token: auth.refresh,
+  expiry_date: auth.expires,
+}
+
+const loadResponse = await runtime.runPromise(loadCodeAssist(tokens))
+const projectId = loadResponse.cloudaicompanionProject
+
+// projectId is now available for customFetch closure
+return {
+  apiKey: "",
+  fetch: customFetch(projectId, getAuth),
+}
+```
+
+Note: Token refresh is handled automatically inside `loadCodeAssist()` - if a 401 occurs, it refreshes the token and persists it via `openCode.client.auth.set()`.
 
 ## Key Behaviors
 
@@ -305,19 +304,19 @@ Update loader function to:
 User authenticates
        |
        v
-loadCodeAssist API -> Check if user has project
+loadCodeAssist API
        |
-  Has project? --Yes--> Use existing project
+       v
+Has currentTier? ──No──> onboardUser API (with default tier)
+       |                         |
+      Yes                        v
+       |                  Return managed projectId
+       v
+Has cloudaicompanionProject? ──Yes──> Use it
        |
        No
        v
-  Check tier
-       |
-  FREE? --Yes--> onboardUser API -> Create managed project -> Use it
-       |
-       No
-       v
-  Throw ProjectIdRequiredError (user must set OPENCODE_GEMINI_PROJECT_ID)
+Throw ProjectIdRequiredError (non-FREE user must configure)
 ```
 
 ## Constants
@@ -347,12 +346,81 @@ export const MODEL_FALLBACKS: Record<string, string> = {
 | `OPENCODE_GEMINI_PROJECT_ID`           | Override project ID (for paid tier users) |
 | `SSH_CONNECTION` / `OPENCODE_HEADLESS` | Use manual code flow instead of browser   |
 
+## Roadmap / Future
+
+| Feature                     | Priority | Notes                                            |
+| --------------------------- | -------- | ------------------------------------------------ |
+| `onboardUser` for new users | Low      | Auto-create managed project for first-time users |
+| Model fallbacks             | Low      | Remap unsupported model variants (e.g. -image)   |
+| Headless auth flow          | Low      | Manual code flow for SSH/headless environments   |
+
 ## Reference Files
 
-| File                                                     | Purpose                |
-| -------------------------------------------------------- | ---------------------- |
-| `.context/opencode-gemini-auth/src/plugin.ts`            | Working reference impl |
-| `.context/opencode-gemini-auth/src/plugin/project.ts`    | Project context logic  |
-| `.context/opencode-gemini-auth/src/plugin/request.ts`    | Request transformation |
-| `.context/opencode-gemini-auth/src/plugin/token.ts`      | Token refresh          |
-| `.context/gemini-cli/packages/core/src/config/models.ts` | Model definitions      |
+| File                                                          | Purpose                 |
+| ------------------------------------------------------------- | ----------------------- |
+| `.context/opencode-gemini-auth/src/plugin.ts`                 | Working reference impl  |
+| `.context/opencode-gemini-auth/src/plugin/project.ts`         | Project context logic   |
+| `.context/opencode-gemini-auth/src/plugin/request.ts`         | Request transformation  |
+| `.context/opencode-gemini-auth/src/plugin/token.ts`           | Token refresh           |
+| `.context/gemini-cli/packages/core/src/code_assist/setup.ts`  | Original setupUser flow |
+| `.context/gemini-cli/packages/core/src/code_assist/server.ts` | API request structure   |
+| `.context/gemini-cli/packages/core/src/code_assist/types.ts`  | Type definitions        |
+| `.context/gemini-cli/packages/core/src/config/models.ts`      | Model definitions       |
+
+## Effect HttpClient Reference
+
+How to make POST requests with Effect HttpClient:
+
+```typescript
+import {
+  HttpClient,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "@effect/platform"
+import { Effect } from "effect"
+
+// Basic POST with JSON body
+const makeRequest = Effect.gen(function* () {
+  const client = yield* HttpClient.HttpClient
+
+  const request = HttpClientRequest.post(
+    "https://api.example.com/endpoint",
+  ).pipe(
+    HttpClientRequest.bodyJson({ key: "value" }),
+    HttpClientRequest.setHeaders({
+      Authorization: "Bearer token",
+    }),
+  )
+
+  const response = yield* client.execute(request)
+  return yield* response.json
+})
+
+// With error handling by status
+const withStatusHandling = Effect.gen(function* () {
+  const client = yield* HttpClient.HttpClient
+
+  const request = HttpClientRequest.post(
+    "https://api.example.com/endpoint",
+  ).pipe(HttpClientRequest.bodyJson({ key: "value" }))
+
+  return yield* request.pipe(
+    client.execute,
+    Effect.flatMap(
+      HttpClientResponse.matchStatus({
+        "2xx": (res) => res.json,
+        401: () => Effect.fail("Unauthorized"),
+        orElse: (res) => Effect.fail(`Unexpected status: ${res.status}`),
+      }),
+    ),
+  )
+})
+```
+
+Key patterns:
+
+- `HttpClientRequest.post(url)` - Create POST request
+- `HttpClientRequest.bodyJson(data)` - Set JSON body (auto-sets Content-Type)
+- `HttpClientRequest.setHeaders({...})` - Add headers
+- `client.execute(request)` - Execute the request
+- `response.json` - Parse JSON response

@@ -172,7 +172,7 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
         client.setCredentials(tokens)
 
         const result = yield* Effect.tryPromise({
-          try: () => client.getAccessToken(),
+          try: () => client.refreshAccessToken(),
           catch: (cause) =>
             new OAuthError({
               reason: "token_refresh",
@@ -181,12 +181,7 @@ export class GeminiOAuth extends Effect.Service<GeminiOAuth>()("GeminiOAuth", {
             }),
         })
 
-        if (result.token) return result.token
-
-        return yield* new OAuthError({
-          reason: "token_refresh",
-          message: "Failed to get access token - no token returned",
-        })
+        return result.credentials
       }),
     }
   }),

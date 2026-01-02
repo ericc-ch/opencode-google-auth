@@ -1,13 +1,15 @@
 import type { GoogleGenerativeAIProviderSettings } from "@ai-sdk/google"
-import { FetchHttpClient, HttpClient } from "@effect/platform"
+import { HttpClient } from "@effect/platform"
 import { BunHttpServer } from "@effect/platform-bun"
 import type { Plugin } from "@opencode-ai/plugin"
 import { Effect, Exit, Layer, pipe, Scope } from "effect"
 import { GeminiOAuth } from "./lib/auth/gemini"
 import { SERVICE_NAME, SUPPORTED_MODELS } from "./lib/config"
+import { fetchEffect } from "./lib/fetch"
+import { loadCodeAssist } from "./lib/project"
 import { makeRuntime } from "./lib/runtime"
 import fallbackModels from "./models.json"
-import { fetchEffect } from "./lib/fetch"
+import type { Credentials } from "google-auth-library"
 
 const fetchModels = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
@@ -15,10 +17,7 @@ const fetchModels = Effect.gen(function* () {
   const data = (yield* response.json) as Record<string, unknown>
 
   return data.google as typeof fallbackModels
-}).pipe(
-  Effect.provide(FetchHttpClient.layer),
-  Effect.catchAll(() => Effect.succeed(fallbackModels)),
-)
+}).pipe(Effect.catchAll(() => Effect.succeed(fallbackModels)))
 
 export const main: Plugin = async (context) => {
   const runtime = makeRuntime(context)
@@ -49,19 +48,25 @@ export const main: Plugin = async (context) => {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
 
-        // I imagine we're gonna get the persisted tokens here
-        // Check expiry, refresh if needed, etc.
+        const credentials: Credentials = {
+          access_token: auth.access,
+          refresh_token: auth.refresh,
+          expiry_date: auth.expires,
+        }
+
+        await runtime.runPromise(
+          Effect.gen(function* () {
+            const response = yield* loadCodeAssist(credentials).pipe(
+              Effect.tapError(Effect.logError),
+            )
+
+            yield* Effect.log(response)
+          }),
+        )
 
         return {
           apiKey: "not needed probably",
           fetch: (async (input, init) => {
-            await context.client.app.log({
-              body: {
-                level: "debug",
-                message: "anjir lah",
-                service: "geminicli",
-              },
-            })
             const response = await runtime.runPromise(fetchEffect(input, init))
             return response
           }) as typeof fetch,
