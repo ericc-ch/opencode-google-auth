@@ -61,7 +61,8 @@ export const loadCodeAssist = Effect.fn(function* (tokens: Credentials) {
       Effect.andThen((req) => client.execute(req)),
       Effect.andThen(
         HttpClientResponse.matchStatus({
-          "2xx": (res) => res.json,
+          "2xx": (res) =>
+            HttpClientResponse.schemaBodyJson(LoadCodeAssistResponse)(res),
           401: () => new TokenExpiredError(),
           "4xx": (res) =>
             new ProjectError({
@@ -83,7 +84,6 @@ export const loadCodeAssist = Effect.fn(function* (tokens: Credentials) {
             }),
         }),
       ),
-      Effect.andThen(Schema.decodeUnknown(LoadCodeAssistResponse)),
     )
 
   return yield* pipe(

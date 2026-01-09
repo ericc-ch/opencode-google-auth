@@ -207,12 +207,12 @@ describe("GeminiOAuth", () => {
   })
 
   describe("refresh", () => {
-    it("succeeds when getAccessToken returns token", async () => {
+    it("succeeds when refreshAccessToken returns credentials", async () => {
       const mockClient = createMockClient({
         setCredentials: () => {},
-        getAccessToken: () =>
+        refreshAccessToken: () =>
           Promise.resolve({
-            token: "new_access_token",
+            credentials: { access_token: "new_access_token" },
             res: null,
           }),
       })
@@ -232,49 +232,13 @@ describe("GeminiOAuth", () => {
         }).pipe(Effect.provide(TestLayer)),
       )
 
-      expect(result).toBe("new_access_token")
+      expect(result).toEqual({ access_token: "new_access_token" })
     })
 
-    it("fails when getAccessToken returns no token", async () => {
+    it("fails when refreshAccessToken throws", async () => {
       const mockClient = createMockClient({
         setCredentials: () => {},
-        getAccessToken: () =>
-          Promise.resolve({
-            token: null,
-            res: null,
-          }),
-      })
-
-      const MockClientLayer = Layer.succeed(GoogleOAuth2Client, mockClient)
-      const TestLayer = Layer.provide(
-        GeminiOAuth.DefaultWithoutDependencies,
-        MockClientLayer,
-      )
-
-      const result = await Effect.runPromiseExit(
-        Effect.gen(function* () {
-          const oauth = yield* GeminiOAuth
-          return yield* oauth.refresh({
-            refresh_token: "test_refresh_token",
-          })
-        }).pipe(Effect.provide(TestLayer)),
-      )
-
-      expect(Exit.isFailure(result)).toBe(true)
-      if (Exit.isFailure(result)) {
-        const error = result.cause
-        expect(error._tag).toBe("Fail")
-        if (error._tag === "Fail") {
-          expect(error.error).toBeInstanceOf(OAuthError)
-          expect(error.error.reason).toBe("token_refresh")
-        }
-      }
-    })
-
-    it("fails when getAccessToken throws", async () => {
-      const mockClient = createMockClient({
-        setCredentials: () => {},
-        getAccessToken: () => Promise.reject(new Error("Refresh failed")),
+        refreshAccessToken: () => Promise.reject(new Error("Refresh failed")),
       })
 
       const MockClientLayer = Layer.succeed(GoogleOAuth2Client, mockClient)

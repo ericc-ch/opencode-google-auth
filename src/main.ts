@@ -5,7 +5,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { Effect, Exit, Layer, pipe, Scope } from "effect"
 import { GeminiOAuth } from "./lib/auth/gemini"
 import { SERVICE_NAME, SUPPORTED_MODELS } from "./lib/config"
-import { fetchEffect } from "./lib/fetch"
+import { transformRequest, transformResponse } from "./lib/fetch"
 import { loadCodeAssist } from "./lib/project"
 import { makeRuntime } from "./lib/runtime"
 import fallbackModels from "./models.json"
@@ -23,11 +23,11 @@ export const main: Plugin = async (context) => {
   const runtime = makeRuntime(context)
   const googleConfig = await runtime.runPromise(fetchModels)
 
-  const filteredModels: typeof googleConfig.models = pipe(
+  const filteredModels = pipe(
     googleConfig.models,
-    Object.entries,
+    (models) => Object.entries(models),
     (entries) => entries.filter(([key]) => SUPPORTED_MODELS.includes(key)),
-    Object.fromEntries,
+    (filtered) => Object.fromEntries(filtered),
   )
 
   return {
@@ -39,6 +39,7 @@ export const main: Plugin = async (context) => {
         id: SERVICE_NAME,
         name: "Gemini CLI",
         api: "https://cloudcode-pa.googleapis.com",
+        // oxlint-disable-next-line typescript/no-explicit-any
         models: filteredModels as any,
       }
     },
@@ -54,21 +55,34 @@ export const main: Plugin = async (context) => {
           expiry_date: auth.expires,
         }
 
-        await runtime.runPromise(
-          Effect.gen(function* () {
-            const response = yield* loadCodeAssist(credentials).pipe(
-              Effect.tapError(Effect.logError),
-            )
-
-            yield* Effect.log(response)
-          }),
+        const codeAssist = await pipe(
+          credentials,
+          loadCodeAssist,
+          Effect.tapError(Effect.logError),
+          runtime.runPromise,
         )
+        const projectId = codeAssist.cloudaicompanionProject
 
         return {
-          apiKey: "not needed probably",
+          apiKey: "",
           fetch: (async (input, init) => {
-            const response = await runtime.runPromise(fetchEffect(input, init))
-            return response
+            const currentAuth = await getAuth()
+            if (currentAuth.type !== "oauth") {
+              return fetch(input, init)
+            }
+
+            const transformed = transformRequest({
+              input,
+              init,
+              accessToken: currentAuth.access,
+              projectId,
+            })
+
+            const response = await fetch(transformed.input, transformed.init)
+            return transformResponse({
+              response,
+              streaming: transformed.streaming,
+            })
           }) as typeof fetch,
         } satisfies GoogleGenerativeAIProviderSettings
       },

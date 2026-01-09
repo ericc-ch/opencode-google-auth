@@ -1,3 +1,49 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json"
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  "plugins": ["import", "oxc", "unicorn", "typescript"],
+
+  "rules": {
+    // Perf
+    "oxc/no-accumulating-spread": "error",
+    "oxc/no-map-spread": "error",
+
+    "unicorn/prefer-array-find": "error",
+    "unicorn/prefer-array-flat-map": "error",
+    "unicorn/prefer-set-has": "error",
+
+    // Restriction
+    "class-methods-use-this": "error",
+    "default-case": "error",
+    "no-bitwise": "error",
+    "no-param-reassign": "error",
+    "no-regex-spaces": "error",
+
+    "import/no-commonjs": "error",
+    "import/no-cycle": "error",
+
+    "oxc/bad-bitwise-operator": "error",
+    "oxc/no-const-enum": "error",
+
+    "typescript/no-dynamic-delete": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-namespace": "error",
+    "typescript/use-unknown-in-catch-callback-variable": "error",
+
+    "unicorn/no-abusive-eslint-disable": "error",
+    "unicorn/no-array-for-each": "error",
+    "unicorn/no-document-cookie": "error",
+    "unicorn/no-length-as-slice-end": "error",
+    "unicorn/no-magic-array-flat-depth": "error",
+    "unicorn/prefer-modern-math-apis": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-number-properties": "error",
+
+    // Style
+    "default-case-last": "error",
+    "default-param-last": "error",
+    "max-params": "error",
+    "no-duplicate-imports": "error",
+    "yoda": "error"
+  }
 }

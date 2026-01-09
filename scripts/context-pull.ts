@@ -31,33 +31,40 @@ export const repos = [
     remote: "https://github.com/jenslys/opencode-gemini-auth.git",
     branch: "main",
   },
-  // {
-  //   name: "opencode-google-antigravity-auth",
-  //   remote: "https://github.com/shekohex/opencode-google-antigravity-auth.git",
-  //   branch: "main",
-  // },
-  // {
-  //   name: "opencode-antigravity-auth",
-  //   remote: "https://github.com/NoeFabris/opencode-antigravity-auth.git",
-  //   branch: "main",
-  // },
-  // {
-  //   name: "vibeproxy",
-  //   remote: "https://github.com/automazeio/vibeproxy.git",
-  //   branch: "main",
-  // },
+  {
+    name: "opencode-antigravity-auth",
+    remote: "https://github.com/NoeFabris/opencode-antigravity-auth.git",
+    branch: "main",
+  },
+  {
+    name: "cli-proxy-api",
+    remote: "https://github.com/router-for-me/CLIProxyAPI.git",
+    branch: "main",
+  },
 ]
 
-for (const repo of repos) {
+const operations = repos.map(async (repo) => {
   const repoDir = path.join(contextRoot, repo.name)
 
   if (!fs.existsSync(repoDir)) {
     console.log(`Cloning ${repo.name}...`)
-    await Bun.$`git clone --depth 1 --branch ${repo.branch} ${repo.remote} ${repoDir}`
+    await Bun.$`git clone --depth 1 --branch ${repo.branch} ${repo.remote} ${repoDir}`.quiet()
+    console.log(`✓ Cloned ${repo.name}`)
   } else {
     console.log(`Pulling ${repo.name}...`)
-    await Bun.$`git pull`.cwd(repoDir)
+    await Bun.$`git pull`.cwd(repoDir).quiet()
+    console.log(`✓ Pulled ${repo.name}`)
   }
+})
+
+const results = await Promise.allSettled(operations)
+
+const failures = results.filter((r) => r.status === "rejected")
+if (failures.length > 0) {
+  console.error(`\n${failures.length} operation(s) failed:`)
+  failures.forEach((f) =>
+    console.error(`  - ${(f as PromiseRejectedResult).reason.message}`),
+  )
 }
 
 console.log("Done!")
