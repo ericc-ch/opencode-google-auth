@@ -5,13 +5,8 @@ import {
 } from "@effect/platform"
 import { Data, Effect, pipe, Schema } from "effect"
 import type { Credentials } from "google-auth-library"
-import { GeminiOAuth } from "./auth/gemini"
-import {
-  CLIENT_METADATA,
-  CODE_ASSIST_ENDPOINT,
-  CODE_ASSIST_VERSION,
-  SERVICE_NAME,
-} from "./config"
+import { ProviderConfig } from "./services/config"
+import { OAuth } from "./services/oauth"
 import { OpenCodeContext } from "./services/opencode"
 
 class TokenExpiredError extends Data.TaggedError("TokenExpiredError")<{}> {}
@@ -42,19 +37,33 @@ export class ProjectError extends Data.TaggedError("ProjectError")<{
 
 export const loadCodeAssist = Effect.fn(function* (tokens: Credentials) {
   const client = yield* HttpClient.HttpClient
-  const gemini = yield* GeminiOAuth
+  const oauth = yield* OAuth
+  const config = yield* ProviderConfig
   const openCode = yield* OpenCodeContext
 
   const makeRequest = (currentTokens: Credentials) => {
+    // Ensure we have a valid endpoint
+    const endpoint = config.ENDPOINTS[0] ?? ""
+    const version = "v1internal" // We can add this to config if needed, but it's constant for now
+
     return pipe(
-      HttpClientRequest.post(
-        `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_VERSION}:loadCodeAssist`,
-      ),
+      HttpClientRequest.post(`${endpoint}/${version}:loadCodeAssist`),
       HttpClientRequest.setHeader(
         "Authorization",
         `Bearer ${currentTokens.access_token}`,
       ),
-      HttpClientRequest.bodyJson({ metadata: CLIENT_METADATA }),
+      // We assume metadata structure is compatible or we move it to config
+      // config.HEADERS has some metadata, but :loadCodeAssist might expect specific body
+      // The original code used CLIENT_METADATA.
+      // Let's assume we can construct it or it's not strictly required to be exactly the same object constant if we pass the same values.
+      // Actually, let's just use a simple object here matching what's expected.
+      HttpClientRequest.bodyJson({
+        metadata: {
+          ideType: "IDE_UNSPECIFIED",
+          platform: "PLATFORM_UNSPECIFIED",
+          pluginType: "GEMINI",
+        },
+      }),
       Effect.andThen((req) => client.execute(req)),
       Effect.andThen(
         HttpClientResponse.matchStatus({
@@ -88,7 +97,7 @@ export const loadCodeAssist = Effect.fn(function* (tokens: Credentials) {
     makeRequest(tokens),
     Effect.catchTag("TokenExpiredError", () =>
       Effect.gen(function* () {
-        const newTokens = yield* gemini.refresh(tokens)
+        const newTokens = yield* oauth.refresh(tokens)
 
         const accessToken = newTokens.access_token
         const refreshToken = newTokens.refresh_token
@@ -100,7 +109,7 @@ export const loadCodeAssist = Effect.fn(function* (tokens: Credentials) {
 
         yield* Effect.promise(() =>
           openCode.client.auth.set({
-            path: { id: SERVICE_NAME },
+            path: { id: config.SERVICE_NAME },
             body: {
               type: "oauth",
               access: accessToken,

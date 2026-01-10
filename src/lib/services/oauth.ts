@@ -4,11 +4,11 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "@effect/platform"
+import { BunHttpServer } from "@effect/platform-bun"
 import { Context, Data, Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { OAuth2Client, type Credentials } from "google-auth-library"
-import type { ProviderConfigShape } from "./config"
-import { BunHttpServer } from "@effect/platform-bun"
 import type { BunServeOptions } from "../../types"
+import type { ProviderConfigShape } from "./config"
 
 export class OAuthError extends Data.TaggedError("OAuthError")<{
   readonly reason:
@@ -21,8 +21,13 @@ export class OAuthError extends Data.TaggedError("OAuthError")<{
   readonly cause?: unknown
 }> {}
 
+export interface OAuthResult {
+  readonly authUrl: string
+  readonly callback: () => Effect.Effect<Credentials, OAuthError>
+}
+
 export interface OAuthShape {
-  readonly authenticate: () => Effect.Effect<Credentials, OAuthError>
+  readonly authenticate: () => Effect.Effect<OAuthResult, OAuthError>
   readonly refresh: (
     tokens: Credentials,
   ) => Effect.Effect<Credentials, OAuthError>
@@ -110,33 +115,40 @@ export const makeOAuthLive = (config: ProviderConfigShape) =>
 
           yield* Effect.log("Started OAuth2 callback server")
 
-          const search = yield* Deferred.await(deferredParams)
-          yield* Effect.log("Received OAuth2 callback with params", search)
+          const callback = Effect.gen(function* () {
+            const search = yield* Deferred.await(deferredParams)
+            yield* Effect.log("Received OAuth2 callback with params", search)
 
-          yield* Fiber.interrupt(serverFiber)
+            yield* Fiber.interrupt(serverFiber)
 
-          if (state !== search.state) {
-            return yield* new OAuthError({
-              reason: "state_mismatch",
-              message: "Invalid state parameter. Possible CSRF attack.",
+            if (state !== search.state) {
+              return yield* new OAuthError({
+                reason: "state_mismatch",
+                message: "Invalid state parameter. Possible CSRF attack.",
+              })
+            }
+
+            const result = yield* Effect.tryPromise({
+              try: () =>
+                client.getToken({
+                  code: search.code,
+                  redirect_uri: redirectUri,
+                }),
+              catch: (cause) =>
+                new OAuthError({
+                  reason: "token_exchange",
+                  message: "Failed to exchange authorization code for tokens",
+                  cause,
+                }),
             })
-          }
 
-          const result = yield* Effect.tryPromise({
-            try: () =>
-              client.getToken({
-                code: search.code,
-                redirect_uri: redirectUri,
-              }),
-            catch: (cause) =>
-              new OAuthError({
-                reason: "token_exchange",
-                message: "Failed to exchange authorization code for tokens",
-                cause,
-              }),
+            return result.tokens
           })
 
-          return result.tokens
+          return {
+            authUrl,
+            callback: () => callback,
+          }
         },
         Effect.provide(ServerLive),
         Effect.scoped,
