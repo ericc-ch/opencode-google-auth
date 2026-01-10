@@ -62,9 +62,9 @@ const results = await Promise.allSettled(operations)
 const failures = results.filter((r) => r.status === "rejected")
 if (failures.length > 0) {
   console.error(`\n${failures.length} operation(s) failed:`)
-  failures.forEach((f) =>
-    console.error(`  - ${(f as PromiseRejectedResult).reason.message}`),
-  )
+  for (const f of failures) {
+    console.error(`  - ${(f as PromiseRejectedResult).reason.message}`)
+  }
 }
 
 console.log("Done!")
