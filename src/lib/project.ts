@@ -12,18 +12,15 @@ import {
   CODE_ASSIST_VERSION,
   SERVICE_NAME,
 } from "./config"
-import { OpenCodeContext } from "./opencode"
+import { OpenCodeContext } from "./services/opencode"
 
 class TokenExpiredError extends Data.TaggedError("TokenExpiredError")<{}> {}
-
-const PrivacyNotice = Schema.Struct({})
 
 const CodeAssistTier = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   description: Schema.String,
   userDefinedCloudaicompanionProject: Schema.Boolean,
-  privacyNotice: PrivacyNotice,
   isDefault: Schema.optional(Schema.Boolean),
 })
 
@@ -48,8 +45,8 @@ export const loadCodeAssist = Effect.fn(function* (tokens: Credentials) {
   const gemini = yield* GeminiOAuth
   const openCode = yield* OpenCodeContext
 
-  const makeRequest = (currentTokens: Credentials) =>
-    pipe(
+  const makeRequest = (currentTokens: Credentials) => {
+    return pipe(
       HttpClientRequest.post(
         `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_VERSION}:loadCodeAssist`,
       ),
@@ -85,6 +82,7 @@ export const loadCodeAssist = Effect.fn(function* (tokens: Credentials) {
         }),
       ),
     )
+  }
 
   return yield* pipe(
     makeRequest(tokens),

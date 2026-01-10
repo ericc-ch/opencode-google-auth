@@ -3,26 +3,25 @@ import { HttpClient } from "@effect/platform"
 import { BunHttpServer } from "@effect/platform-bun"
 import type { Plugin } from "@opencode-ai/plugin"
 import { Effect, Exit, Layer, pipe, Scope } from "effect"
+import type { Credentials } from "google-auth-library"
 import { GeminiOAuth } from "./lib/auth/gemini"
 import { SERVICE_NAME, SUPPORTED_MODELS } from "./lib/config"
 import { transformRequest, transformResponse } from "./lib/fetch"
 import { loadCodeAssist } from "./lib/project"
 import { makeRuntime } from "./lib/runtime"
 import fallbackModels from "./models.json"
-import type { Credentials } from "google-auth-library"
+import type { BunServeOptions, OpenCodeModel } from "./types"
 
 const fetchModels = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
   const response = yield* client.get("https://models.dev/api.json")
   const data = (yield* response.json) as Record<string, unknown>
-
   return data.google as typeof fallbackModels
 }).pipe(Effect.catchAll(() => Effect.succeed(fallbackModels)))
 
 export const main: Plugin = async (context) => {
   const runtime = makeRuntime(context)
   const googleConfig = await runtime.runPromise(fetchModels)
-
   const filteredModels = pipe(
     googleConfig.models,
     (models) => Object.entries(models),
@@ -33,14 +32,12 @@ export const main: Plugin = async (context) => {
   return {
     config: async (config) => {
       config.provider ??= {}
-
       config.provider[SERVICE_NAME] = {
         ...googleConfig,
         id: SERVICE_NAME,
         name: "Gemini CLI",
         api: "https://cloudcode-pa.googleapis.com",
-        // oxlint-disable-next-line typescript/no-explicit-any
-        models: filteredModels as any,
+        models: filteredModels as Record<string, OpenCodeModel>,
       }
     },
     auth: {
@@ -91,9 +88,7 @@ export const main: Plugin = async (context) => {
           type: "oauth",
           label: "OAuth with Google",
           authorize: async () => {
-            const serverOptions = { port: 0 } satisfies Partial<
-              Bun.Serve.Options<undefined, never>
-            >
+            const serverOptions: BunServeOptions = { port: 0 }
             const serverScope = Effect.runSync(Scope.make())
 
             const Server = await pipe(
