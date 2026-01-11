@@ -17,6 +17,13 @@ export type OpenCodeLogLevel = NonNullable<
 
 export type BunServeOptions = Partial<Bun.Serve.Options<undefined, never>>
 
-export type VeryRequired<T> = {
-  [P in keyof T]-?: NonNullable<T[P]>
+/**
+ * Subset of google-auth-library Credentials type.
+ *
+ * Why don't they fucking use object union instead of making everything nullable.
+ */
+export interface Credentials {
+  access_token: string
+  refresh_token: string
+  expiry_date: number
 }

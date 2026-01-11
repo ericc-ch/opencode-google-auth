@@ -1,9 +1,9 @@
 import { HttpClient, HttpClientRequest } from "@effect/platform"
 import { Data, Effect, Ref, Schema } from "effect"
-import { OAuth2Client, type Credentials } from "google-auth-library"
+import { OAuth2Client } from "google-auth-library"
 import { CODE_ASSIST_VERSION, ProviderConfig } from "./config"
 import { OpenCodeContext } from "./opencode"
-import type { VeryRequired } from "../../types"
+import type { Credentials } from "../../types"
 
 export class SessionError extends Data.TaggedError("SessionError")<{
   readonly reason:
@@ -39,9 +39,7 @@ export class Session extends Effect.Service<Session>()("Session", {
     const openCode = yield* OpenCodeContext
     const httpClient = yield* HttpClient.HttpClient
 
-    const credentialsRef = yield* Ref.make<VeryRequired<Credentials> | null>(
-      null,
-    )
+    const credentialsRef = yield* Ref.make<Credentials | null>(null)
     const projectRef = yield* Ref.make<LoadCodeAssistResponse | null>(null)
 
     const endpoint = config.ENDPOINTS[0] ?? ""
@@ -77,10 +75,7 @@ export class Session extends Effect.Service<Session>()("Session", {
       })
 
       const newCredentials = result.credentials
-      yield* Ref.set(
-        credentialsRef,
-        newCredentials as VeryRequired<Credentials>,
-      )
+      yield* Ref.set(credentialsRef, newCredentials as Credentials)
 
       const accessToken = newCredentials.access_token
       const refreshToken = newCredentials.refresh_token
@@ -136,7 +131,6 @@ export class Session extends Effect.Service<Session>()("Session", {
       }
 
       const json = yield* response.json
-
       const body = yield* Schema.decodeUnknown(LoadCodeAssistResponse)(json)
 
       return body
@@ -165,42 +159,42 @@ export class Session extends Effect.Service<Session>()("Session", {
       return project
     })
 
-    const getAccessToken = () =>
-      Effect.gen(function* () {
-        const currentCreds = yield* Ref.get(credentialsRef)
+    const getAccessToken = Effect.gen(function* () {
+      const currentCreds = yield* Ref.get(credentialsRef)
 
-        if (!currentCreds?.access_token) {
+      if (!currentCreds?.access_token) {
+        return yield* new SessionError({
+          reason: "no_tokens",
+          message: "No access token available",
+        })
+      }
+
+      const buffer = 5 * 60 * 1000
+      const isExpired = (currentCreds.expiry_date ?? 0) < Date.now() + buffer
+
+      let accessToken = currentCreds.access_token
+
+      if (isExpired) {
+        yield* Effect.log("Access token expired, refreshing...")
+        const refreshed = yield* refreshTokens
+        if (!refreshed.access_token) {
           return yield* new SessionError({
-            reason: "no_tokens",
-            message: "No access token available",
+            reason: "token_refresh",
+            message: "Refresh did not return access token",
           })
         }
+        accessToken = refreshed.access_token
+      }
 
-        const buffer = 5 * 60 * 1000
-        const isExpired = (currentCreds.expiry_date ?? 0) < Date.now() + buffer
-
-        let accessToken = currentCreds.access_token
-
-        if (isExpired) {
-          yield* Effect.log("Access token expired, refreshing...")
-          const refreshed = yield* refreshTokens
-          if (!refreshed.access_token) {
-            return yield* new SessionError({
-              reason: "token_refresh",
-              message: "Refresh did not return access token",
-            })
-          }
-          accessToken = refreshed.access_token
-        }
-
-        yield* ensureProject
-        return accessToken
-      })
+      yield* ensureProject
+      return accessToken
+    })
 
     return {
-      setCredentials: (credentials: VeryRequired<Credentials>) =>
+      setCredentials: (credentials: Credentials) =>
         Ref.set(credentialsRef, credentials),
       getAccessToken,
+      ensureProject,
     }
   }),
 }) {}

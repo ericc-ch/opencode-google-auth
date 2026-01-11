@@ -5,7 +5,7 @@ import {
 } from "../lib/services/config"
 
 const STREAM_ACTION = "streamGenerateContent"
-const PATH_PATTERN = regex("/v1beta/models/(?<model>[^:]+):(?<action>\\w+)")
+const PATH_PATTERN = regex("/models/(?<model>[^:]+):(?<action>\\w+)")
 
 interface TransformRequestParams {
   readonly input: Parameters<typeof fetch>[0]

@@ -40,6 +40,8 @@ const parseSSE = (body: ReadableStream<Uint8Array>) =>
     Stream.map((event) =>
       Retry.is(event) ? encoder.write(event) : parseAndMerge(event),
     ),
+    Stream.encodeText,
+    Stream.tapError(Effect.logError),
   )
 
 export const transformStreamingResponse = (
@@ -52,7 +54,7 @@ export const transformStreamingResponse = (
 
     const transformed = parseSSE(response.body)
     const readable = Stream.toReadableStream(
-      transformed as Stream.Stream<string, never, never>,
+      transformed as Stream.Stream<Uint8Array, never, never>,
     )
 
     return new Response(readable, {

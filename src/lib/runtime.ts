@@ -26,7 +26,7 @@ export const makeRuntime = ({
     Layer.merge(OAuth.Default),
     Layer.merge(Session.Default),
     Layer.provideMerge(OpenCodeLive),
-    Layer.provide(FetchHttpClient.layer),
+    Layer.provideMerge(FetchHttpClient.layer),
     Layer.provide(ProviderConfigLive),
   )
 

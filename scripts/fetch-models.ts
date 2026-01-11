@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import path from "node:path"
-import { SUPPORTED_MODELS } from "../src/lib/config"
+import { GEMINI_CLI_MODELS } from "../src/lib/services/config"
 
 const MODELS_DEV_URL = "https://models.dev/api.json"
 
@@ -31,7 +31,7 @@ if (!googleConfig) {
 
 const filteredModels = Object.fromEntries(
   Object.entries(googleConfig.models).filter(([key]) =>
-    SUPPORTED_MODELS.includes(key),
+    GEMINI_CLI_MODELS.includes(key as (typeof GEMINI_CLI_MODELS)[number]),
   ),
 )
 
