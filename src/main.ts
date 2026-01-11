@@ -3,23 +3,21 @@ import { HttpClient } from "@effect/platform"
 import type { Plugin } from "@opencode-ai/plugin"
 import { Effect, Layer, pipe } from "effect"
 import type { Credentials } from "google-auth-library"
-import { loadCodeAssist } from "./lib/project"
+
 import { makeProviderRuntime } from "./lib/runtime"
 import {
-  ANTIGRAVITY_CONFIG,
-  ANTIGRAVITY_MODELS,
-  AntigravityConfigLive,
   GEMINI_CLI_CONFIG,
   GEMINI_CLI_MODELS,
   GeminiCliConfigLive,
   ProviderConfig,
 } from "./lib/services/config"
 import { makeOAuthLive, OAuth } from "./lib/services/oauth"
+import { initSession } from "./lib/services/session"
 import {
-  AntigravityRequestTransformerLive,
-  GeminiRequestTransformerLive,
-  RequestTransformer,
-} from "./lib/services/transform"
+  transformRequest,
+  transformNonStreamingResponse,
+  transformStreamingResponse,
+} from "./transform"
 import fallbackModels from "./models.json"
 import type { OpenCodeModel } from "./types"
 
@@ -33,20 +31,11 @@ const fetchModels = Effect.gen(function* () {
 const GeminiLayer = Layer.mergeAll(
   GeminiCliConfigLive,
   makeOAuthLive(GEMINI_CLI_CONFIG),
-  GeminiRequestTransformerLive,
-)
-
-const AntigravityLayer = Layer.mergeAll(
-  AntigravityConfigLive,
-  makeOAuthLive(ANTIGRAVITY_CONFIG),
-  AntigravityRequestTransformerLive,
 )
 
 export const geminiCli: Plugin = async (context) => {
   const runtime = makeProviderRuntime(context, GeminiLayer)
-
-  // Get config from the runtime environment
-  const configService = await runtime.runPromise(ProviderConfig)
+  const config = await runtime.runPromise(ProviderConfig)
 
   const googleConfig = await runtime.runPromise(fetchModels)
   const filteredModels = pipe(
@@ -60,18 +49,18 @@ export const geminiCli: Plugin = async (context) => {
   )
 
   return {
-    config: async (config) => {
-      config.provider ??= {}
-      config.provider[configService.SERVICE_NAME] = {
+    config: async (cfg) => {
+      cfg.provider ??= {}
+      cfg.provider[config.SERVICE_NAME] = {
         ...googleConfig,
-        id: configService.SERVICE_NAME,
-        name: configService.DISPLAY_NAME,
-        api: configService.ENDPOINTS[0] ?? "",
+        id: config.SERVICE_NAME,
+        name: config.DISPLAY_NAME,
+        api: config.ENDPOINTS[0] ?? "",
         models: filteredModels as Record<string, OpenCodeModel>,
       }
     },
     auth: {
-      provider: configService.SERVICE_NAME,
+      provider: config.SERVICE_NAME,
       loader: async (getAuth) => {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
@@ -82,34 +71,30 @@ export const geminiCli: Plugin = async (context) => {
           expiry_date: auth.expires,
         }
 
-        const codeAssist = await pipe(
-          loadCodeAssist(credentials),
-          Effect.tapError(Effect.logError),
-          runtime.runPromise,
-        )
-        const projectId = codeAssist.cloudaicompanionProject
+        // Initialize session (fetches project, sets up token refresh)
+        const session = await runtime.runPromise(initSession(credentials))
 
         return {
           apiKey: "",
           fetch: (async (input, init) => {
-            const currentAuth = await getAuth()
-            if (currentAuth.type !== "oauth") {
-              return fetch(input, init)
-            }
+            // Get fresh access token (refreshes if needed)
+            const accessToken = await runtime.runPromise(
+              session.getAccessToken(),
+            )
 
-            const transformer = await runtime.runPromise(RequestTransformer)
-            const transformed = transformer.transformRequest({
-              input,
-              init,
-              accessToken: currentAuth.access,
-              projectId,
-            })
+            // Transform request (pure function)
+            const result = transformRequest(
+              { input, init, accessToken, projectId: session.projectId },
+              config,
+            )
 
-            const response = await fetch(transformed.input, transformed.init)
-            return transformer.transformResponse({
-              response,
-              streaming: transformed.streaming,
-            })
+            // Make request
+            const response = await fetch(result.input, result.init)
+
+            // Transform response
+            return result.streaming ?
+                await Effect.runPromise(transformStreamingResponse(response))
+              : await transformNonStreamingResponse(response)
           }) as typeof fetch,
         } satisfies GoogleGenerativeAIProviderSettings
       },
@@ -126,17 +111,13 @@ export const geminiCli: Plugin = async (context) => {
             )
 
             return {
-              url: result.authUrl,
+              url: "Authentication complete",
               method: "auto",
-              instructions: "Complete the authentication in your browser.",
+              instructions: "You are now authenticated!",
               callback: async () => {
-                const callbackResult = await runtime.runPromise(
-                  result.callback(),
-                )
-
-                const accessToken = callbackResult.access_token
-                const refreshToken = callbackResult.refresh_token
-                const expiryDate = callbackResult.expiry_date
+                const accessToken = result.access_token
+                const refreshToken = result.refresh_token
+                const expiryDate = result.expiry_date
 
                 if (!accessToken || !refreshToken || !expiryDate) {
                   return { type: "failed" }
@@ -144,124 +125,7 @@ export const geminiCli: Plugin = async (context) => {
 
                 return {
                   type: "success",
-                  provider: configService.SERVICE_NAME,
-                  access: accessToken,
-                  refresh: refreshToken,
-                  expires: expiryDate,
-                }
-              },
-            }
-          },
-        },
-      ],
-    },
-  }
-}
-
-export const antigravity: Plugin = async (context) => {
-  const runtime = makeProviderRuntime(context, AntigravityLayer)
-
-  const configService = await runtime.runPromise(ProviderConfig)
-
-  // Antigravity supports both Gemini and Claude models
-  const googleConfig = await runtime.runPromise(fetchModels)
-  const filteredModels = pipe(
-    googleConfig.models,
-    (models) => Object.entries(models),
-    (entries) =>
-      entries.filter(([key]) =>
-        (ANTIGRAVITY_MODELS as readonly string[]).includes(key),
-      ),
-    (filtered) => Object.fromEntries(filtered),
-  )
-
-  return {
-    config: async (config) => {
-      config.provider ??= {}
-      config.provider[configService.SERVICE_NAME] = {
-        ...googleConfig,
-        id: configService.SERVICE_NAME,
-        name: configService.DISPLAY_NAME,
-        api: configService.ENDPOINTS[0] ?? "", // Default to first endpoint
-        models: filteredModels as Record<string, OpenCodeModel>,
-      }
-    },
-    auth: {
-      provider: configService.SERVICE_NAME,
-      loader: async (getAuth) => {
-        const auth = await getAuth()
-        if (auth.type !== "oauth") return {}
-
-        const credentials: Credentials = {
-          access_token: auth.access,
-          refresh_token: auth.refresh,
-          expiry_date: auth.expires,
-        }
-
-        const codeAssist = await pipe(
-          loadCodeAssist(credentials),
-          Effect.tapError(Effect.logError),
-          runtime.runPromise,
-        )
-        const projectId = codeAssist.cloudaicompanionProject
-
-        return {
-          apiKey: "",
-          fetch: (async (input, init) => {
-            const currentAuth = await getAuth()
-            if (currentAuth.type !== "oauth") {
-              return fetch(input, init)
-            }
-
-            const transformer = await runtime.runPromise(RequestTransformer)
-            const transformed = transformer.transformRequest({
-              input,
-              init,
-              accessToken: currentAuth.access,
-              projectId,
-            })
-
-            const response = await fetch(transformed.input, transformed.init)
-
-            return transformer.transformResponse({
-              response,
-              streaming: transformed.streaming,
-            })
-          }) as typeof fetch,
-        } satisfies GoogleGenerativeAIProviderSettings
-      },
-      methods: [
-        {
-          type: "oauth",
-          label: "OAuth with Antigravity",
-          authorize: async () => {
-            const result = await runtime.runPromise(
-              pipe(
-                OAuth,
-                Effect.flatMap((oauth) => oauth.authenticate()),
-              ),
-            )
-
-            return {
-              url: result.authUrl,
-              method: "auto",
-              instructions: "Complete the authentication in your browser.",
-              callback: async () => {
-                const callbackResult = await runtime.runPromise(
-                  result.callback(),
-                )
-
-                const accessToken = callbackResult.access_token
-                const refreshToken = callbackResult.refresh_token
-                const expiryDate = callbackResult.expiry_date
-
-                if (!accessToken || !refreshToken || !expiryDate) {
-                  return { type: "failed" }
-                }
-
-                return {
-                  type: "success",
-                  provider: configService.SERVICE_NAME,
+                  provider: config.SERVICE_NAME,
                   access: accessToken,
                   refresh: refreshToken,
                   expires: expiryDate,

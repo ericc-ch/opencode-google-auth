@@ -1,3 +1,10 @@
+/**
+ * OAuth service
+ *
+ * Handles initial OAuth authentication flow only.
+ * Token refresh is handled by the Session service.
+ */
+
 import {
   HttpRouter,
   HttpServer,
@@ -11,26 +18,13 @@ import type { BunServeOptions } from "../../types"
 import type { ProviderConfigShape } from "./config"
 
 export class OAuthError extends Data.TaggedError("OAuthError")<{
-  readonly reason:
-    | "browser"
-    | "callback"
-    | "state_mismatch"
-    | "token_exchange"
-    | "token_refresh"
+  readonly reason: "browser" | "callback" | "state_mismatch" | "token_exchange"
   readonly message: string
   readonly cause?: unknown
 }> {}
 
-export interface OAuthResult {
-  readonly authUrl: string
-  readonly callback: () => Effect.Effect<Credentials, OAuthError>
-}
-
 export interface OAuthShape {
-  readonly authenticate: () => Effect.Effect<OAuthResult, OAuthError>
-  readonly refresh: (
-    tokens: Credentials,
-  ) => Effect.Effect<Credentials, OAuthError>
+  readonly authenticate: () => Effect.Effect<Credentials, OAuthError>
 }
 
 export class OAuth extends Context.Tag("OAuth")<OAuth, OAuthShape>() {}
@@ -115,64 +109,38 @@ export const makeOAuthLive = (config: ProviderConfigShape) =>
 
           yield* Effect.log("Started OAuth2 callback server")
 
-          const callback = Effect.gen(function* () {
-            const search = yield* Deferred.await(deferredParams)
-            yield* Effect.log("Received OAuth2 callback with params", search)
+          const search = yield* Deferred.await(deferredParams)
+          yield* Effect.log("Received OAuth2 callback with params", search)
 
-            yield* Fiber.interrupt(serverFiber)
+          yield* Fiber.interrupt(serverFiber)
 
-            if (state !== search.state) {
-              return yield* new OAuthError({
-                reason: "state_mismatch",
-                message: "Invalid state parameter. Possible CSRF attack.",
-              })
-            }
-
-            const result = yield* Effect.tryPromise({
-              try: () =>
-                client.getToken({
-                  code: search.code,
-                  redirect_uri: redirectUri,
-                }),
-              catch: (cause) =>
-                new OAuthError({
-                  reason: "token_exchange",
-                  message: "Failed to exchange authorization code for tokens",
-                  cause,
-                }),
+          if (state !== search.state) {
+            return yield* new OAuthError({
+              reason: "state_mismatch",
+              message: "Invalid state parameter. Possible CSRF attack.",
             })
+          }
 
-            return result.tokens
+          const result = yield* Effect.tryPromise({
+            try: () =>
+              client.getToken({
+                code: search.code,
+                redirect_uri: redirectUri,
+              }),
+            catch: (cause) =>
+              new OAuthError({
+                reason: "token_exchange",
+                message: "Failed to exchange authorization code for tokens",
+                cause,
+              }),
           })
 
-          return {
-            authUrl,
-            callback: () => callback,
-          }
+          return result.tokens
         },
         Effect.provide(ServerLive),
         Effect.scoped,
       )
 
-      const refresh = Effect.fn(function* (tokens: Credentials) {
-        client.setCredentials(tokens)
-
-        const result = yield* Effect.tryPromise({
-          try: () => client.refreshAccessToken(),
-          catch: (cause) =>
-            new OAuthError({
-              reason: "token_refresh",
-              message: "Failed to refresh access token",
-              cause,
-            }),
-        })
-
-        return result.credentials
-      })
-
-      return {
-        authenticate,
-        refresh,
-      }
+      return { authenticate }
     }),
   )
