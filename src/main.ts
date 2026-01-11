@@ -127,7 +127,7 @@ export const geminiCli: Plugin = async (context) => {
             )
 
             return {
-              url: "Authentication complete",
+              url: "",
               method: "auto",
               instructions: "You are now authenticated!",
               callback: async () => {

@@ -41,7 +41,6 @@ const parseSSE = (body: ReadableStream<Uint8Array>) =>
       Retry.is(event) ? encoder.write(event) : parseAndMerge(event),
     ),
     Stream.encodeText,
-    Stream.tapError(Effect.logError),
   )
 
 export const transformStreamingResponse = (
