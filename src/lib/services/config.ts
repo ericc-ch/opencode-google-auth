@@ -1,4 +1,4 @@
-import { Context, Layer } from "effect"
+import { Context } from "effect"
 
 export interface ProviderConfigShape {
   readonly SERVICE_NAME: string
@@ -78,13 +78,3 @@ export const ANTIGRAVITY_CONFIG = {
     "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
   },
 } as const satisfies ProviderConfigShape
-
-export const GeminiCliConfigLive = Layer.succeed(
-  ProviderConfig,
-  GEMINI_CLI_CONFIG,
-)
-
-export const AntigravityConfigLive = Layer.succeed(
-  ProviderConfig,
-  ANTIGRAVITY_CONFIG,
-)

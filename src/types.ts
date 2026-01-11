@@ -16,3 +16,7 @@ export type OpenCodeLogLevel = NonNullable<
 >["level"]
 
 export type BunServeOptions = Partial<Bun.Serve.Options<undefined, never>>
+
+export type VeryRequired<T> = {
+  [P in keyof T]-?: NonNullable<T[P]>
+}

@@ -3,8 +3,7 @@ import { HttpClient } from "@effect/platform"
 import type { Plugin } from "@opencode-ai/plugin"
 import { Effect, Layer, pipe } from "effect"
 import type { Credentials } from "google-auth-library"
-
-import { makeProviderRuntime } from "./lib/runtime"
+import { makeRuntime } from "./lib/runtime"
 import {
   GEMINI_CLI_CONFIG,
   GEMINI_CLI_MODELS,
@@ -12,13 +11,10 @@ import {
   ProviderConfig,
 } from "./lib/services/config"
 import { makeOAuthLive, OAuth } from "./lib/services/oauth"
-import { initSession } from "./lib/services/session"
-import {
-  transformRequest,
-  transformNonStreamingResponse,
-  transformStreamingResponse,
-} from "./transform"
 import fallbackModels from "./models.json"
+import { transformRequest } from "./transform/request"
+import { transformNonStreamingResponse } from "./transform/response"
+import { transformStreamingResponse } from "./transform/stream"
 import type { OpenCodeModel } from "./types"
 
 const fetchModels = Effect.gen(function* () {
@@ -34,7 +30,7 @@ const GeminiLayer = Layer.mergeAll(
 )
 
 export const geminiCli: Plugin = async (context) => {
-  const runtime = makeProviderRuntime(context, GeminiLayer)
+  const runtime = makeRuntime(context, GeminiLayer)
   const config = await runtime.runPromise(ProviderConfig)
 
   const googleConfig = await runtime.runPromise(fetchModels)
@@ -71,27 +67,24 @@ export const geminiCli: Plugin = async (context) => {
           expiry_date: auth.expires,
         }
 
-        // Initialize session (fetches project, sets up token refresh)
-        const session = await runtime.runPromise(initSession(credentials))
+        const session = await runtime.runPromise(
+          makeSession(credentials).pipe(Effect.provide(runtime.context)),
+        )
 
         return {
           apiKey: "",
           fetch: (async (input, init) => {
-            // Get fresh access token (refreshes if needed)
             const accessToken = await runtime.runPromise(
-              session.getAccessToken(),
+              session.getAccessToken().pipe(Effect.provide(runtime.context)),
             )
 
-            // Transform request (pure function)
             const result = transformRequest(
               { input, init, accessToken, projectId: session.projectId },
               config,
             )
 
-            // Make request
             const response = await fetch(result.input, result.init)
 
-            // Transform response
             return result.streaming ?
                 await Effect.runPromise(transformStreamingResponse(response))
               : await transformNonStreamingResponse(response)

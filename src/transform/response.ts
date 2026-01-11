@@ -11,9 +11,9 @@ export const transformNonStreamingResponse = async (
     const cloned = response.clone()
     const parsed = (await cloned.json()) as { response?: unknown }
 
-    // Unwrap { response: X } -> X
     if (parsed.response !== undefined) {
-      return new Response(JSON.stringify(parsed.response), {
+      const { response: responseData, ...rest } = parsed
+      return new Response(JSON.stringify({ ...rest, ...responseData }), {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,

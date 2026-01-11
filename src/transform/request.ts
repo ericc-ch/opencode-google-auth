@@ -1,10 +1,18 @@
 import { regex } from "arkregex"
-import { CODE_ASSIST_VERSION } from "../lib/config"
-import type { ProviderConfigShape } from "../lib/services/config"
-import type { TransformRequestParams } from "./types"
+import {
+  CODE_ASSIST_VERSION,
+  type ProviderConfigShape,
+} from "../lib/services/config"
 
 const STREAM_ACTION = "streamGenerateContent"
 const PATH_PATTERN = regex("/v1beta/models/(?<model>[^:]+):(?<action>\\w+)")
+
+interface TransformRequestParams {
+  readonly input: Parameters<typeof fetch>[0]
+  readonly init: Parameters<typeof fetch>[1]
+  readonly accessToken: string
+  readonly projectId: string
+}
 
 export const transformRequest = (
   params: TransformRequestParams,
