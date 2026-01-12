@@ -42,7 +42,7 @@ export class Session extends Effect.Service<Session>()("Session", {
     const credentialsRef = yield* Ref.make<Credentials | null>(null)
     const projectRef = yield* Ref.make<LoadCodeAssistResponse | null>(null)
 
-    const endpoint = config.ENDPOINTS[0] ?? ""
+    const endpoint = config.ENDPOINTS.at(0) as string
     const oauthClient = new OAuth2Client({
       clientId: config.CLIENT_ID,
       clientSecret: config.CLIENT_SECRET,

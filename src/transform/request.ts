@@ -12,6 +12,7 @@ interface TransformRequestParams {
   readonly init: Parameters<typeof fetch>[1]
   readonly accessToken: string
   readonly projectId: string
+  readonly endpoint: string
 }
 
 export const transformRequest = async (
@@ -21,6 +22,11 @@ export const transformRequest = async (
   const url = new URL(
     params.input instanceof Request ? params.input.url : params.input,
   )
+
+  // Rewrite the URL to use the specified endpoint
+  const endpointUrl = new URL(params.endpoint)
+  url.protocol = endpointUrl.protocol
+  url.host = endpointUrl.host
 
   const match = PATH_PATTERN.exec(url.pathname)
   if (!match) {

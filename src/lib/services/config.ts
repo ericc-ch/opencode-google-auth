@@ -1,3 +1,4 @@
+import type { GoogleGenerativeAIProviderOptions } from "@ai-sdk/google"
 import { Context, pipe } from "effect"
 import type {
   ModelsDev,
@@ -148,6 +149,11 @@ export const antigravityConfig = (): ProviderConfigShape => ({
         ...geminiPro,
         id: "gemini-3-pro-low",
         name: "Gemini 3 Pro (Low)",
+        options: {
+          thinkingConfig: {
+            thinkingLevel: "low",
+          },
+        } satisfies GoogleGenerativeAIProviderOptions,
       },
       "gemini-3-pro-high": {
         ...geminiPro,
@@ -158,6 +164,11 @@ export const antigravityConfig = (): ProviderConfigShape => ({
         ...claudeSonnet,
         id: "claude-sonnet-4-5",
         reasoning: false,
+        options: {
+          thinkingConfig: {
+            includeThoughts: false,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions,
       },
       "claude-sonnet-4-5-thinking": {
         ...claudeSonnet,
@@ -175,14 +186,36 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       ...googleProvider,
       id: antigravityConfig().SERVICE_NAME,
       name: antigravityConfig().DISPLAY_NAME,
-      api: antigravityConfig().ENDPOINTS.at(0) as string,
+      api: antigravityConfig().ENDPOINTS.at(2) as string,
       models,
     }
   },
-  transformBody: async (body) => ({
-    ...body,
-    requestType: "agent",
-    userAgent: "antigravity",
-    requestId: `agent-${crypto.randomUUID()}`,
-  }),
+  transformBody: async (body) => {
+    // Fix thinkingConfig camelCase to snake_case for Claude models only
+    if (
+      body.model.toLowerCase().includes("claude")
+      && body.request
+      && typeof body.request === "object"
+    ) {
+      const request = body.request as Record<string, unknown>
+      const generationConfig = request.generationConfig as
+        | Record<string, unknown>
+        | undefined
+      const thinkingConfig = generationConfig?.thinkingConfig as
+        | Record<string, unknown>
+        | undefined
+
+      if (thinkingConfig?.includeThoughts !== undefined) {
+        thinkingConfig.include_thoughts = thinkingConfig.includeThoughts
+        delete thinkingConfig.includeThoughts
+      }
+    }
+
+    return {
+      ...body,
+      requestType: "agent",
+      userAgent: "antigravity",
+      requestId: `agent-${crypto.randomUUID()}`,
+    }
+  },
 })

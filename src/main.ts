@@ -30,42 +30,63 @@ const customFetch = Effect.fn(function* (
   const accessToken = yield* session.getAccessToken
   const project = yield* session.ensureProject
 
-  yield* Effect.log("Transforming request:", {
-    input,
-    init,
-  })
+  let lastResponse: Response | null = null
 
-  const result = yield* Effect.promise(() =>
-    transformRequest(
-      {
-        accessToken,
-        projectId: project.cloudaicompanionProject,
-        input,
-        init,
-      },
-      config,
-    ),
-  )
+  for (const endpoint of config.ENDPOINTS) {
+    const result = yield* Effect.promise(() =>
+      transformRequest(
+        {
+          accessToken,
+          projectId: project.cloudaicompanionProject,
+          input,
+          init,
+          endpoint,
+        },
+        config,
+      ),
+    )
 
-  yield* Effect.log("Transformed request:", result)
-
-  const response = yield* Effect.promise(() => fetch(result.input, result.init))
-
-  if (!response.ok) {
-    const cloned = response.clone()
-    const clonedJson = yield* Effect.promise(() => cloned.json())
+    const { request, ...loggedBody } = JSON.parse(result.init.body as string)
+    const generationConfig = request.generationConfig
 
     yield* Effect.log(
-      "Received response:",
-      cloned.status,
-      clonedJson,
-      cloned.headers,
+      "Transformed request (Omitting request except generationConfig) :",
+      result.streaming,
+      result.input,
+      { ...loggedBody, request: { generationConfig } },
     )
+
+    const response = yield* Effect.promise(() =>
+      fetch(result.input, result.init),
+    )
+
+    // On 429, try next endpoint
+    if (response.status === 429) {
+      yield* Effect.log(`429 rate limited on ${endpoint}, trying next...`)
+      lastResponse = response
+      continue
+    }
+
+    if (!response.ok) {
+      const cloned = response.clone()
+      const clonedJson = yield* Effect.promise(() => cloned.json())
+
+      yield* Effect.log(
+        "Received response:",
+        cloned.status,
+        clonedJson,
+        cloned.headers,
+      )
+    }
+
+    return result.streaming
+      ? yield* transformStreamingResponse(response)
+      : yield* Effect.promise(() => transformNonStreamingResponse(response))
   }
 
-  return result.streaming ?
-      yield* transformStreamingResponse(response)
-    : yield* Effect.promise(() => transformNonStreamingResponse(response))
+  // All endpoints exhausted with 429
+  yield* Effect.log("All endpoints rate limited (429)")
+  return lastResponse as Response
 }, Effect.tapDefect(Effect.logError))
 
 export const geminiCli: Plugin = async (context) => {
