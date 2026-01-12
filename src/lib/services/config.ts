@@ -140,25 +140,33 @@ export const antigravityConfig = (): ProviderConfigShape => ({
     ] as OpenCodeModel
 
     const models: Record<string, OpenCodeModel> = {
-      "gemini-3-flash": geminiFlash,
+      "gemini-3-flash": {
+        ...geminiFlash,
+        id: "gemini-3-flash",
+      },
       "gemini-3-pro-low": {
         ...geminiPro,
+        id: "gemini-3-pro-low",
         name: "Gemini 3 Pro (Low)",
       },
       "gemini-3-pro-high": {
         ...geminiPro,
+        id: "gemini-3-pro-high",
         name: "Gemini 3 Pro (High)",
       },
       "claude-sonnet-4-5": {
         ...claudeSonnet,
+        id: "claude-sonnet-4-5",
         reasoning: false,
       },
       "claude-sonnet-4-5-thinking": {
         ...claudeSonnet,
+        id: "claude-sonnet-4-5-thinking",
         name: "Claude Sonnet 4.5 (Reasoning)",
       },
       "claude-opus-4-5-thinking": {
         ...claudeOpus,
+        id: "claude-opus-4-5-thinking",
         name: "Claude Opus 4.5 (Reasoning)",
       },
     }

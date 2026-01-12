@@ -50,20 +50,23 @@ const customFetch = Effect.fn(function* (
   yield* Effect.log("Transformed request:", result)
 
   const response = yield* Effect.promise(() => fetch(result.input, result.init))
-  const cloned = response.clone()
-  const clonedJson = yield* Effect.promise(() => cloned.json())
 
-  yield* Effect.log(
-    "Received response:",
-    cloned.status,
-    clonedJson,
-    cloned.headers,
-  )
+  if (!response.ok) {
+    const cloned = response.clone()
+    const clonedJson = yield* Effect.promise(() => cloned.json())
+
+    yield* Effect.log(
+      "Received response:",
+      cloned.status,
+      clonedJson,
+      cloned.headers,
+    )
+  }
 
   return result.streaming ?
       yield* transformStreamingResponse(response)
     : yield* Effect.promise(() => transformNonStreamingResponse(response))
-})
+}, Effect.tapDefect(Effect.logError))
 
 export const geminiCli: Plugin = async (context) => {
   const runtime = makeRuntime({
