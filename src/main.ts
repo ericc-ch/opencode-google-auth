@@ -60,9 +60,9 @@ const customFetch = Effect.fn(function* (
       fetch(result.input, result.init),
     )
 
-    // On 429, try next endpoint
-    if (response.status === 429) {
-      yield* Effect.log(`429 rate limited on ${endpoint}, trying next...`)
+    // On 429 or 403, try next endpoint
+    if (response.status === 429 || response.status === 403) {
+      yield* Effect.log(`${response.status} on ${endpoint}, trying next...`)
       lastResponse = response
       continue
     }
@@ -79,13 +79,13 @@ const customFetch = Effect.fn(function* (
       )
     }
 
-    return result.streaming
-      ? yield* transformStreamingResponse(response)
+    return result.streaming ?
+        yield* transformStreamingResponse(response)
       : yield* Effect.promise(() => transformNonStreamingResponse(response))
   }
 
   // All endpoints exhausted with 429
-  yield* Effect.log("All endpoints rate limited (429)")
+  yield* Effect.logWarning("All endpoints rate limited (429)")
   return lastResponse as Response
 }, Effect.tapDefect(Effect.logError))
 

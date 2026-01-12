@@ -112,11 +112,11 @@ export const antigravityConfig = (): ProviderConfigShape => ({
   ],
   ENDPOINTS: [
     "https://daily-cloudcode-pa.sandbox.googleapis.com",
-    "https://daily-cloudcode-pa.googleapis.com",
+    "https://autopush-cloudcode-pa.sandbox.googleapis.com",
     "https://cloudcode-pa.googleapis.com",
   ],
   HEADERS: {
-    "User-Agent": "antigravity/1.104.0 darwin/arm64",
+    "User-Agent": "antigravity/1.11.5 windows/amd64",
     "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
     "Client-Metadata":
       '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}',
@@ -191,7 +191,7 @@ export const antigravityConfig = (): ProviderConfigShape => ({
     }
   },
   transformBody: async (body) => {
-    // Fix thinkingConfig camelCase to snake_case for Claude models only
+    // Handle thinkingConfig for Claude models
     if (
       body.model.toLowerCase().includes("claude")
       && body.request
@@ -201,13 +201,34 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       const generationConfig = request.generationConfig as
         | Record<string, unknown>
         | undefined
-      const thinkingConfig = generationConfig?.thinkingConfig as
-        | Record<string, unknown>
-        | undefined
 
-      if (thinkingConfig?.includeThoughts !== undefined) {
-        thinkingConfig.include_thoughts = thinkingConfig.includeThoughts
-        delete thinkingConfig.includeThoughts
+      // For non-thinking Claude, remove thinkingConfig entirely
+      const isNonThinkingClaude = !body.model.toLowerCase().includes("thinking")
+      if (isNonThinkingClaude && generationConfig?.thinkingConfig) {
+        delete generationConfig.thinkingConfig
+      }
+
+      // For thinking Claude, convert camelCase to snake_case and add default budget
+      if (!isNonThinkingClaude && generationConfig?.thinkingConfig) {
+        const thinkingConfig = generationConfig.thinkingConfig as Record<
+          string,
+          unknown
+        >
+
+        if (thinkingConfig.includeThoughts !== undefined) {
+          thinkingConfig.include_thoughts = thinkingConfig.includeThoughts
+          delete thinkingConfig.includeThoughts
+        }
+
+        if (thinkingConfig.thinkingBudget !== undefined) {
+          thinkingConfig.thinking_budget = thinkingConfig.thinkingBudget
+          delete thinkingConfig.thinkingBudget
+        }
+
+        // Add default thinking_budget if not present (required for Claude thinking)
+        if (thinkingConfig.thinking_budget === undefined) {
+          thinkingConfig.thinking_budget = 32768 // Default to high tier
+        }
       }
     }
 
