@@ -38,11 +38,11 @@ const makeOpenCodeLogger = Effect.gen(function* () {
 })
 
 export const combinedLogger = Effect.gen(function* () {
+  const openCodeLogger = yield* makeOpenCodeLogger
   const fileLogger = yield* pipe(
     Logger.jsonLogger,
     PlatformLogger.toFile(path.join(import.meta.dir, "plugin.log")),
   )
-  const openCodeLogger = yield* makeOpenCodeLogger
 
   return Logger.zip(openCodeLogger, fileLogger)
 })

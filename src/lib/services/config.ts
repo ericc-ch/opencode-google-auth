@@ -1,4 +1,16 @@
-import { Context } from "effect"
+import { Context, pipe } from "effect"
+import type {
+  ModelsDev,
+  OpenCodeModel,
+  OpenCodeProvider,
+  Provider,
+} from "../../types"
+
+export interface WrappedBody {
+  readonly project: string
+  readonly request: unknown
+  readonly model: string
+}
 
 export interface ProviderConfigShape {
   readonly SERVICE_NAME: string
@@ -8,6 +20,10 @@ export interface ProviderConfigShape {
   readonly SCOPES: readonly string[]
   readonly CLIENT_ID: string
   readonly CLIENT_SECRET: string
+  readonly getConfig: (modelsDev: ModelsDev) => OpenCodeProvider
+  readonly transformBody?: (
+    body: WrappedBody,
+  ) => Promise<Record<string, unknown>>
 }
 
 export class ProviderConfig extends Context.Tag("ProviderConfig")<
@@ -32,12 +48,15 @@ export const GEMINI_CLI_MODELS = [
 ] as const
 
 export const ANTIGRAVITY_MODELS = [
-  ...GEMINI_CLI_MODELS,
-  "claude-sonnet-4",
-  "claude-sonnet-4-thinking",
+  "gemini-3-flash",
+  "gemini-3-pro-low",
+  "gemini-3-pro-high",
+  "claude-sonnet-4-5",
+  "claude-sonnet-4-5-thinking",
+  "claude-opus-4-5-thinking",
 ] as const
 
-export const GEMINI_CLI_CONFIG = {
+export const geminiCliConfig = (): ProviderConfigShape => ({
   SERVICE_NAME: "gemini-cli",
   DISPLAY_NAME: "Gemini CLI",
   CLIENT_ID:
@@ -52,10 +71,32 @@ export const GEMINI_CLI_CONFIG = {
   HEADERS: {
     "User-Agent": "google-api-nodejs-client/9.15.1",
     "X-Goog-Api-Client": "gl-node/22.17.0",
+    "Client-Metadata":
+      "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
   },
-} as const satisfies ProviderConfigShape
+  getConfig: (modelsDev) => {
+    const provider = modelsDev.google as Provider
+    const filteredModels = pipe(
+      provider.models,
+      (models) => Object.entries(models),
+      (entries) =>
+        entries.filter(([key]) =>
+          (GEMINI_CLI_MODELS as readonly string[]).includes(key),
+        ),
+      (filtered) => Object.fromEntries(filtered),
+    )
 
-export const ANTIGRAVITY_CONFIG = {
+    return {
+      ...provider,
+      id: geminiCliConfig().SERVICE_NAME,
+      name: geminiCliConfig().DISPLAY_NAME,
+      api: geminiCliConfig().ENDPOINTS.at(0) as string,
+      models: filteredModels as Record<string, OpenCodeModel>,
+    }
+  },
+})
+
+export const antigravityConfig = (): ProviderConfigShape => ({
   SERVICE_NAME: "antigravity",
   DISPLAY_NAME: "Antigravity",
   CLIENT_ID:
@@ -76,5 +117,64 @@ export const ANTIGRAVITY_CONFIG = {
   HEADERS: {
     "User-Agent": "antigravity/1.104.0 darwin/arm64",
     "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
+    "Client-Metadata":
+      '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}',
   },
-} as const satisfies ProviderConfigShape
+  getConfig: (modelsDev) => {
+    const googleProvider = modelsDev.google as Provider
+    const googleVertextProvider = modelsDev[
+      "google-vertex-anthropic"
+    ] as Provider
+
+    const geminiFlash = googleProvider.models[
+      "gemini-3-flash-preview"
+    ] as OpenCodeModel
+    const geminiPro = googleProvider.models[
+      "gemini-3-pro-preview"
+    ] as OpenCodeModel
+    const claudeSonnet = googleVertextProvider.models[
+      "claude-sonnet-4-5@20250929"
+    ] as OpenCodeModel
+    const claudeOpus = googleVertextProvider.models[
+      "claude-opus-4-5@20251101"
+    ] as OpenCodeModel
+
+    const models: Record<string, OpenCodeModel> = {
+      "gemini-3-flash": geminiFlash,
+      "gemini-3-pro-low": {
+        ...geminiPro,
+        name: "Gemini 3 Pro (Low)",
+      },
+      "gemini-3-pro-high": {
+        ...geminiPro,
+        name: "Gemini 3 Pro (High)",
+      },
+      "claude-sonnet-4-5": {
+        ...claudeSonnet,
+        reasoning: false,
+      },
+      "claude-sonnet-4-5-thinking": {
+        ...claudeSonnet,
+        name: "Claude Sonnet 4.5 (Reasoning)",
+      },
+      "claude-opus-4-5-thinking": {
+        ...claudeOpus,
+        name: "Claude Opus 4.5 (Reasoning)",
+      },
+    }
+
+    return {
+      ...googleProvider,
+      id: antigravityConfig().SERVICE_NAME,
+      name: antigravityConfig().DISPLAY_NAME,
+      api: antigravityConfig().ENDPOINTS.at(0) as string,
+      models,
+    }
+  },
+  transformBody: async (body) => ({
+    ...body,
+    requestType: "agent",
+    userAgent: "antigravity",
+    requestId: `agent-${crypto.randomUUID()}`,
+  }),
+})

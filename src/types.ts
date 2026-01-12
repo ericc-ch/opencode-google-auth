@@ -27,3 +27,40 @@ export interface Credentials {
   refresh_token: string
   expiry_date: number
 }
+
+/**
+ * Types for models.dev, simplified
+ */
+
+interface InterleavedConfig {
+  field: string
+}
+
+export interface Model {
+  id: string
+  name: string
+  family: string
+  attachment: boolean
+  reasoning: boolean
+  tool_call: boolean
+  temperature: boolean
+  knowledge?: string
+  release_date?: string
+  last_updated?: string
+  open_weights: boolean
+  structured_output?: boolean
+  interleaved?: boolean | InterleavedConfig
+  status?: string
+}
+
+export interface Provider {
+  id: string
+  env: string[]
+  npm: string
+  name: string
+  doc: string
+  models: Record<string, Model>
+  api?: string
+}
+
+export type ModelsDev = Record<string, Provider>

@@ -14,7 +14,7 @@ interface TransformRequestParams {
   readonly projectId: string
 }
 
-export const transformRequest = (
+export const transformRequest = async (
   params: TransformRequestParams,
   config: ProviderConfigShape,
 ) => {
@@ -64,7 +64,10 @@ export const transformRequest = (
         request: parsed,
         model,
       }
-      body = JSON.stringify(wrapped)
+      const finalBody = config.transformBody
+        ? await config.transformBody(wrapped)
+        : wrapped
+      body = JSON.stringify(finalBody)
     } catch {
       // Keep original body if parse fails
     }
