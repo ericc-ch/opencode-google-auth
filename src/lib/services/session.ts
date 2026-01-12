@@ -1,5 +1,9 @@
-import { HttpClient, HttpClientRequest } from "@effect/platform"
-import { Data, Effect, Ref, Schema } from "effect"
+import {
+  HttpClient,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "@effect/platform"
+import { Data, Effect, pipe, Ref, Schema } from "effect"
 import { OAuth2Client } from "google-auth-library"
 import { CODE_ASSIST_VERSION, ProviderConfig } from "./config"
 import { OpenCodeContext } from "./opencode"
@@ -114,26 +118,24 @@ export class Session extends Effect.Service<Session>()("Session", {
         }),
       )
 
-      const response = yield* httpClient.execute(request)
-
-      if (response.status === 401) {
-        return yield* new SessionError({
-          reason: "unauthorized",
-          message: "Token expired",
-        })
-      }
-
-      if (response.status >= 400) {
-        return yield* new SessionError({
-          reason: "project_fetch",
-          message: `HTTP error: ${response.status}`,
-        })
-      }
-
-      const json = yield* response.json
-      const body = yield* Schema.decodeUnknown(LoadCodeAssistResponse)(json)
-
-      return body
+      return yield* pipe(
+        httpClient.execute(request),
+        Effect.flatMap(
+          HttpClientResponse.matchStatus({
+            "2xx": HttpClientResponse.schemaBodyJson(LoadCodeAssistResponse),
+            401: () =>
+              new SessionError({
+                reason: "unauthorized",
+                message: "Token expired",
+              }),
+            orElse: (response) =>
+              new SessionError({
+                reason: "project_fetch",
+                message: `HTTP error: ${response.status}`,
+              }),
+          }),
+        ),
+      )
     }).pipe(
       Effect.catchAll((cause) => {
         if (cause instanceof SessionError) {

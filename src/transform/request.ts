@@ -1,30 +1,26 @@
 import { regex } from "arkregex"
-import {
-  CODE_ASSIST_VERSION,
-  type ProviderConfigShape,
-} from "../lib/services/config"
+import { Effect, pipe } from "effect"
+import { CODE_ASSIST_VERSION, ProviderConfig } from "../lib/services/config"
+import { Session } from "../lib/services/session"
 
 const STREAM_ACTION = "streamGenerateContent"
 const PATH_PATTERN = regex("/models/(?<model>[^:]+):(?<action>\\w+)")
 
-interface TransformRequestParams {
-  readonly input: Parameters<typeof fetch>[0]
-  readonly init: Parameters<typeof fetch>[1]
-  readonly accessToken: string
-  readonly projectId: string
-  readonly endpoint: string
-}
+export const transformRequest = Effect.fn("transformRequest")(function* (
+  input: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1],
+  endpoint: string,
+) {
+  const config = yield* ProviderConfig
+  const session = yield* Session
+  const accessToken = yield* session.getAccessToken
+  const project = yield* session.ensureProject
+  const projectId = project.cloudaicompanionProject
 
-export const transformRequest = async (
-  params: TransformRequestParams,
-  config: ProviderConfigShape,
-) => {
-  const url = new URL(
-    params.input instanceof Request ? params.input.url : params.input,
-  )
+  const url = new URL(input instanceof Request ? input.url : input)
 
   // Rewrite the URL to use the specified endpoint
-  const endpointUrl = new URL(params.endpoint)
+  const endpointUrl = new URL(endpoint)
   url.protocol = endpointUrl.protocol
   url.host = endpointUrl.host
 
@@ -32,7 +28,7 @@ export const transformRequest = async (
   if (!match) {
     return {
       input: url.toString(),
-      init: params.init ?? {},
+      init: init ?? {},
       streaming: false,
     }
   }
@@ -47,10 +43,10 @@ export const transformRequest = async (
   }
 
   // Transform headers
-  const headers = new Headers(params.init?.headers)
+  const headers = new Headers(init?.headers)
   headers.delete("x-api-key")
   headers.delete("x-goog-api-key")
-  headers.set("Authorization", `Bearer ${params.accessToken}`)
+  headers.set("Authorization", `Bearer ${accessToken}`)
 
   for (const [key, value] of Object.entries(config.HEADERS)) {
     headers.set(key, value)
@@ -61,31 +57,32 @@ export const transformRequest = async (
   }
 
   // Wrap request body
-  let body = params.init?.body
+  let body = init?.body
   if (typeof body === "string") {
-    try {
-      const parsed = JSON.parse(body)
-      const wrapped = {
-        project: params.projectId,
-        request: parsed,
-        model,
-      }
-      const finalBody = config.transformBody
-        ? await config.transformBody(wrapped)
-        : wrapped
-      body = JSON.stringify(finalBody)
-    } catch {
-      // Keep original body if parse fails
-    }
+    body = yield* pipe(
+      Effect.try(() => JSON.parse(body as string)),
+      Effect.flatMap((parsed) => {
+        const wrapped = {
+          project: projectId,
+          request: parsed,
+          model,
+        }
+        return config.transformBody ?
+            Effect.promise(() => config.transformBody!(wrapped))
+          : Effect.succeed(wrapped)
+      }),
+      Effect.map((finalBody) => JSON.stringify(finalBody)),
+      Effect.orElseSucceed(() => body as string),
+    )
   }
 
   return {
     input: url.toString(),
     init: {
-      ...params.init,
+      ...init,
       headers,
       body,
     },
     streaming,
   }
-}
+})

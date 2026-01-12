@@ -33,7 +33,7 @@ const parseSSE = (body: ReadableStream<Uint8Array>) =>
   pipe(
     Stream.fromReadableStream(
       () => body,
-      (e) => e as Error,
+      (error) => error,
     ),
     Stream.decodeText,
     Stream.pipeThroughChannel(makeChannel()),
@@ -43,9 +43,7 @@ const parseSSE = (body: ReadableStream<Uint8Array>) =>
     Stream.encodeText,
   )
 
-export const transformStreamingResponse = (
-  response: Response,
-): Effect.Effect<Response, Error> =>
+export const transformStreamingResponse = (response: Response) =>
   Effect.sync(() => {
     if (!response.body) {
       return response

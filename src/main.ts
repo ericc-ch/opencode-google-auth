@@ -26,25 +26,11 @@ const customFetch = Effect.fn(function* (
   init: Parameters<typeof fetch>[1],
 ) {
   const config = yield* ProviderConfig
-  const session = yield* Session
-  const accessToken = yield* session.getAccessToken
-  const project = yield* session.ensureProject
 
   let lastResponse: Response | null = null
 
   for (const endpoint of config.ENDPOINTS) {
-    const result = yield* Effect.promise(() =>
-      transformRequest(
-        {
-          accessToken,
-          projectId: project.cloudaicompanionProject,
-          input,
-          init,
-          endpoint,
-        },
-        config,
-      ),
-    )
+    const result = yield* transformRequest(input, init, endpoint)
 
     const { request, ...loggedBody } = JSON.parse(result.init.body as string)
     const generationConfig = request.generationConfig
