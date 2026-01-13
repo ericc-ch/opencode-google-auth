@@ -148,7 +148,12 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       "claude-opus-4-5@20251101"
     ] as OpenCodeModel
 
-    const models: Record<string, OpenCodeModel> = {
+    const models: Record<
+      string,
+      OpenCodeModel & {
+        variants?: Record<string, Record<string, unknown>>
+      }
+    > = {
       "gemini-3-flash": {
         ...geminiFlash,
         id: "gemini-3-flash",
@@ -187,12 +192,12 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       "claude-sonnet-4-5-thinking": {
         ...claudeSonnet,
         id: "claude-sonnet-4-5-thinking",
-        name: "Claude Sonnet 4.5 (Reasoning)",
+        name: "Claude Sonnet 4.5 (Thinking)",
       },
       "claude-opus-4-5-thinking": {
         ...claudeOpus,
         id: "claude-opus-4-5-thinking",
-        name: "Claude Opus 4.5 (Reasoning)",
+        name: "Claude Opus 4.5 (Thinking)",
       },
     }
 
@@ -236,6 +241,24 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       const generationConfig = request.generationConfig as
         | Record<string, unknown>
         | undefined
+
+      const tools = request.tools as
+        | Array<{ functionDeclarations?: Array<{ parameters?: unknown }> }>
+        | undefined
+      if (tools && Array.isArray(tools)) {
+        for (const tool of tools) {
+          if (
+            tool.functionDeclarations
+            && Array.isArray(tool.functionDeclarations)
+          ) {
+            for (const func of tool.functionDeclarations) {
+              if (!func.parameters) {
+                func.parameters = { type: "object", properties: {} }
+              }
+            }
+          }
+        }
+      }
 
       innerRequest.toolConfig = {
         functionCallingConfig: {

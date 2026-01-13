@@ -16,6 +16,7 @@ import { Data, Deferred, Effect, Fiber, Schema } from "effect"
 import { OAuth2Client } from "google-auth-library"
 import type { BunServeOptions } from "../types"
 import { ProviderConfig } from "./config"
+import open from "open"
 
 export class OAuthError extends Data.TaggedError("OAuthError")<{
   readonly reason: "browser" | "callback" | "state_mismatch" | "token_exchange"
@@ -69,7 +70,17 @@ class OAuth extends Effect.Service<OAuth>()("OAuth", {
         scope: config.SCOPES as unknown as string[],
         prompt: "consent",
       })
+
       yield* Effect.log(`OAuth2 authorization URL: ${authUrl}`)
+      yield* Effect.tryPromise({
+        try: () => open(authUrl),
+        catch: (cause) =>
+          new OAuthError({
+            reason: "browser",
+            message: "Failed to open browser",
+            cause,
+          }),
+      })
 
       const serverFiber = yield* HttpRouter.empty.pipe(
         HttpRouter.get(

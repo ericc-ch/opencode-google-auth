@@ -252,7 +252,6 @@ export const antigravity: Plugin = async (context) => {
         },
       ],
     },
-
     "experimental.chat.system.transform": async (_input, output) => {
       // THIS IS REQUIRED OTHERWISE YOU'LL GET 429 OR 403 FOR SOME GODDAMN REASON
       output.system.unshift(antigravitySpoof)
