@@ -1,5 +1,5 @@
 import type { GoogleGenerativeAIProviderOptions } from "@ai-sdk/google"
-import { Context, pipe } from "effect"
+import { Context, Effect, pipe } from "effect"
 import type {
   ModelsDev,
   OpenCodeModel,
@@ -13,6 +13,12 @@ export interface WrappedBody {
   readonly model: string
 }
 
+export interface RequestContext {
+  readonly body: WrappedBody
+  readonly headers: Headers
+  readonly url: URL
+}
+
 export interface ProviderConfigShape {
   readonly SERVICE_NAME: string
   readonly DISPLAY_NAME: string
@@ -22,9 +28,11 @@ export interface ProviderConfigShape {
   readonly CLIENT_ID: string
   readonly CLIENT_SECRET: string
   readonly getConfig: (modelsDev: ModelsDev) => OpenCodeProvider
-  readonly transformBody?: (
-    body: WrappedBody,
-  ) => Promise<Record<string, unknown>>
+  readonly transformRequest?: (context: RequestContext) => Effect.Effect<{
+    body: Record<string, unknown>
+    headers: Headers
+    url: URL
+  }>
 }
 
 export class ProviderConfig extends Context.Tag("ProviderConfig")<
@@ -190,7 +198,29 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       models,
     }
   },
-  transformBody: async (body) => {
+  transformRequest: Effect.fn(function* (context) {
+    yield* Effect.log(
+      "Transforming request for: ",
+      antigravityConfig().SERVICE_NAME,
+    )
+
+    const { body, headers, url } = context
+    const innerRequest = body.request as Record<string, unknown>
+
+    let sessionId: string | undefined
+    if (
+      innerRequest.labels
+      && typeof innerRequest.labels === "object"
+      && "sessionId" in innerRequest.labels
+    ) {
+      const labels = innerRequest.labels as Record<string, unknown>
+      sessionId = labels.sessionId as string
+      delete labels.sessionId
+      if (Object.keys(labels).length === 0) {
+        delete innerRequest.labels
+      }
+    }
+
     // Handle thinkingConfig for Claude models
     if (
       body.model.toLowerCase().includes("claude")
@@ -232,11 +262,19 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       }
     }
 
-    return {
-      ...body,
-      requestType: "agent",
-      userAgent: "antigravity",
-      requestId: `agent-${crypto.randomUUID()}`,
+    if (sessionId) {
+      innerRequest.sessionId = sessionId
     }
-  },
+
+    return {
+      headers,
+      url,
+      body: {
+        ...body,
+        requestType: "agent",
+        userAgent: "antigravity",
+        requestId: `agent-${crypto.randomUUID()}`,
+      },
+    }
+  }),
 })

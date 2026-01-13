@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test"
-import { Effect } from "effect"
 import { transformStreamingResponse } from "./stream"
 
 describe("transformStreamingResponse", () => {
@@ -25,7 +24,7 @@ describe("transformStreamingResponse", () => {
       headers: { "content-type": "text/event-stream" },
     })
 
-    const result = await Effect.runPromise(transformStreamingResponse(response))
+    const result = await transformStreamingResponse(response)
     const text = await result.text()
 
     expect(text).toContain('data: {"text":"Hello"}')
@@ -39,7 +38,7 @@ describe("transformStreamingResponse", () => {
       headers: { "content-type": "text/event-stream" },
     })
 
-    const result = await Effect.runPromise(transformStreamingResponse(response))
+    const result = await transformStreamingResponse(response)
     const text = await result.text()
 
     expect(text).toContain('data: {"text":"Direct"}')
@@ -48,7 +47,7 @@ describe("transformStreamingResponse", () => {
   it("returns original response if no body", async () => {
     const response = new Response(null, { status: 204 })
 
-    const result = await Effect.runPromise(transformStreamingResponse(response))
+    const result = await transformStreamingResponse(response)
 
     expect(result.status).toBe(204)
   })
@@ -65,7 +64,7 @@ describe("transformStreamingResponse", () => {
       },
     })
 
-    const result = await Effect.runPromise(transformStreamingResponse(response))
+    const result = await transformStreamingResponse(response)
 
     expect(result.status).toBe(200)
     expect(result.headers.get("x-custom")).toBe("value")
@@ -82,7 +81,7 @@ describe("transformStreamingResponse", () => {
       headers: { "content-type": "text/event-stream" },
     })
 
-    const result = await Effect.runPromise(transformStreamingResponse(response))
+    const result = await transformStreamingResponse(response)
     const text = await result.text()
 
     expect(text).toContain('data: {"part":"1"}')
@@ -100,7 +99,7 @@ describe("transformStreamingResponse", () => {
       headers: { "content-type": "text/event-stream" },
     })
 
-    const result = await Effect.runPromise(transformStreamingResponse(response))
+    const result = await transformStreamingResponse(response)
     const text = await result.text()
 
     expect(text).toContain('data: {"valid":"data"}')

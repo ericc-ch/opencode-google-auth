@@ -32,6 +32,11 @@ export const repos = [
     branch: "main",
   },
   {
+    name: "ai-sdk",
+    remote: "https://github.com/vercel/ai.git",
+    branch: "main",
+  },
+  {
     name: "opencode-antigravity-auth",
     remote: "https://github.com/NoeFabris/opencode-antigravity-auth.git",
     branch: "main",

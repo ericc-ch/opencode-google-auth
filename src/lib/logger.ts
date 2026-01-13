@@ -1,14 +1,9 @@
-import type { PluginInput } from "@opencode-ai/plugin"
-import { Context, Effect, Inspectable, Logger, LogLevel, pipe } from "effect"
+import { PlatformLogger } from "@effect/platform"
+import { Effect, Inspectable, Logger, LogLevel, pipe } from "effect"
 import path from "node:path"
 import type { OpenCodeLogLevel } from "../types"
 import { ProviderConfig } from "./services/config"
-import { PlatformLogger } from "@effect/platform"
-
-export class OpenCodeContext extends Context.Tag("OpenCodeContext")<
-  OpenCodeContext,
-  PluginInput
->() {}
+import { OpenCodeContext } from "./services/opencode"
 
 const makeOpenCodeLogger = Effect.gen(function* () {
   const openCode = yield* OpenCodeContext

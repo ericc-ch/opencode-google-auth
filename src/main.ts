@@ -1,4 +1,7 @@
-import type { GoogleGenerativeAIProviderSettings } from "@ai-sdk/google"
+import type {
+  GoogleGenerativeAIProviderOptions,
+  GoogleGenerativeAIProviderSettings,
+} from "@ai-sdk/google"
 import { HttpClient } from "@effect/platform"
 import type { Plugin } from "@opencode-ai/plugin"
 import { Effect } from "effect"
@@ -66,7 +69,7 @@ const customFetch = Effect.fn(function* (
     }
 
     return result.streaming ?
-        yield* transformStreamingResponse(response)
+        transformStreamingResponse(response)
       : yield* Effect.promise(() => transformNonStreamingResponse(response))
   }
 
@@ -247,6 +250,24 @@ export const antigravity: Plugin = async (context) => {
           },
         },
       ],
+    },
+    "chat.params": async (input, output) => {
+      await runtime.runPromise(
+        Effect.log("chat.params event before:", input.model, output.options),
+      )
+
+      if (input.model.providerID === config.id) {
+        output.options = {
+          ...output.options,
+          labels: {
+            sessionId: input.sessionID,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions
+      }
+
+      await runtime.runPromise(
+        Effect.log("chat.params event after:", input.model, output.options),
+      )
     },
   }
 }

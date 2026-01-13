@@ -56,32 +56,37 @@ export const transformRequest = Effect.fn("transformRequest")(function* (
     headers.set("Accept", "text/event-stream")
   }
 
-  // Wrap request body
-  let body = init?.body
-  if (typeof body === "string") {
-    body = yield* pipe(
-      Effect.try(() => JSON.parse(body as string)),
-      Effect.flatMap((parsed) => {
-        const wrapped = {
-          project: projectId,
-          request: parsed,
-          model,
-        }
-        return config.transformBody ?
-            Effect.promise(() => config.transformBody!(wrapped))
-          : Effect.succeed(wrapped)
-      }),
-      Effect.map((finalBody) => JSON.stringify(finalBody)),
-      Effect.orElseSucceed(() => body as string),
-    )
+  // Wrap and transform request
+  const isJson = typeof init?.body === "string"
+  const parsedBody = yield* pipe(
+    Effect.try(() => (isJson ? JSON.parse(init.body as string) : null)),
+    Effect.orElseSucceed(() => null),
+  )
+
+  const wrappedBody = {
+    project: projectId,
+    request: parsedBody ?? {},
+    model,
   }
 
+  const {
+    body: transformedBody,
+    headers: finalHeaders,
+    url: finalUrl,
+  } =
+    config.transformRequest ?
+      yield* config.transformRequest({ body: wrappedBody, headers, url })
+    : { body: wrappedBody, headers, url }
+
+  const finalBody =
+    isJson && parsedBody ? JSON.stringify(transformedBody) : init?.body
+
   return {
-    input: url.toString(),
+    input: finalUrl.toString(),
     init: {
       ...init,
-      headers,
-      body,
+      headers: finalHeaders,
+      body: finalBody,
     },
     streaming,
   }

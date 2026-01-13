@@ -4,7 +4,7 @@ import {
   makeChannel,
   Retry,
 } from "@effect/experimental/Sse"
-import { Effect, pipe, Stream } from "effect"
+import { pipe, Stream } from "effect"
 
 const parseAndMerge = (event: Event): string => {
   if (!event.data) {
@@ -43,20 +43,19 @@ const parseSSE = (body: ReadableStream<Uint8Array>) =>
     Stream.encodeText,
   )
 
-export const transformStreamingResponse = (response: Response) =>
-  Effect.sync(() => {
-    if (!response.body) {
-      return response
-    }
+export const transformStreamingResponse = (response: Response) => {
+  if (!response.body) {
+    return response
+  }
 
-    const transformed = parseSSE(response.body)
-    const readable = Stream.toReadableStream(
-      transformed as Stream.Stream<Uint8Array, never, never>,
-    )
+  const transformed = parseSSE(response.body)
+  const readable = Stream.toReadableStream(
+    transformed as Stream.Stream<Uint8Array, never, never>,
+  )
 
-    return new Response(readable, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    })
+  return new Response(readable, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
   })
+}
