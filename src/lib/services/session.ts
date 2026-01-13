@@ -5,9 +5,9 @@ import {
 } from "@effect/platform"
 import { Data, Effect, pipe, Ref, Schema } from "effect"
 import { OAuth2Client } from "google-auth-library"
+import type { Credentials } from "../../types"
 import { CODE_ASSIST_VERSION, ProviderConfig } from "./config"
 import { OpenCodeContext } from "./opencode"
-import type { Credentials } from "../../types"
 
 export class SessionError extends Data.TaggedError("SessionError")<{
   readonly reason:
@@ -17,6 +17,10 @@ export class SessionError extends Data.TaggedError("SessionError")<{
     | "unauthorized"
   readonly message: string
   readonly cause?: unknown
+}> {}
+
+export class TokenExpiredError extends Data.TaggedError("TokenExpiredError")<{
+  readonly message?: string
 }> {}
 
 const CodeAssistTier = Schema.Struct({
@@ -102,7 +106,7 @@ export class Session extends Effect.Service<Session>()("Session", {
       return newCredentials
     })
 
-    const fetchProject = Effect.gen(function* () {
+    const fetchAttempt = Effect.gen(function* () {
       const credentials = yield* getCredentials
 
       const request = yield* HttpClientRequest.post(
@@ -120,14 +124,11 @@ export class Session extends Effect.Service<Session>()("Session", {
 
       return yield* pipe(
         httpClient.execute(request),
-        Effect.flatMap(
+        Effect.andThen(
           HttpClientResponse.matchStatus({
-            "2xx": HttpClientResponse.schemaBodyJson(LoadCodeAssistResponse),
-            401: () =>
-              new SessionError({
-                reason: "unauthorized",
-                message: "Token expired",
-              }),
+            "2xx": (res) =>
+              HttpClientResponse.schemaBodyJson(LoadCodeAssistResponse)(res),
+            401: () => new TokenExpiredError({ message: "Token expired" }),
             orElse: (response) =>
               new SessionError({
                 reason: "project_fetch",
@@ -136,16 +137,25 @@ export class Session extends Effect.Service<Session>()("Session", {
           }),
         ),
       )
-    }).pipe(
-      Effect.catchAll((cause) => {
-        if (cause instanceof SessionError) {
-          return Effect.fail(cause)
+    })
+
+    const fetchProject = fetchAttempt.pipe(
+      Effect.catchTag("TokenExpiredError", () =>
+        pipe(
+          Effect.log("Token expired, refreshing..."),
+          Effect.flatMap(() => refreshTokens),
+          Effect.flatMap(() => fetchAttempt),
+        ),
+      ),
+      Effect.catchAll((error) => {
+        if (error instanceof SessionError) {
+          return Effect.fail(error)
         }
         return Effect.fail(
           new SessionError({
             reason: "project_fetch",
             message: "Failed to fetch project",
-            cause,
+            cause: error,
           }),
         )
       }),
