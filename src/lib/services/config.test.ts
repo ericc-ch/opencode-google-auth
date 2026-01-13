@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
-import { transformRequest } from "./request"
-import { antigravityConfig, ProviderConfig } from "../lib/services/config"
-import { Session } from "../lib/services/session"
+import { transformRequest } from "../../transform/request"
+import { antigravityConfig, ProviderConfig } from "./config"
+import { Session } from "./session"
 import { Effect, Layer, pipe } from "effect"
 import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
@@ -105,8 +105,16 @@ describe("Antigravity transformRequest", () => {
     const innerRequest = body.request as Record<string, unknown>
     const labels = innerRequest.labels as Record<string, unknown>
 
-    // sessionId should be moved to innerRequest
-    expect(innerRequest.sessionId).toBe("test-session-id")
+    // sessionId should be moved to innerRequest and transformed
+    // The actual format is `-${uuid}:${model}:${project}:seed-${hashedSession}`
+    expect(innerRequest.sessionId).not.toBe("test-session-id")
+    expect(innerRequest.sessionId).toBeString()
+    expect(
+      (innerRequest.sessionId as string).includes("gemini-1.5-flash"),
+    ).toBe(true)
+    expect(
+      (innerRequest.sessionId as string).includes("test-project-123"),
+    ).toBe(true)
 
     // labels should be cleaned up (sessionId removed)
     expect(labels.sessionId).toBeUndefined()
@@ -136,7 +144,51 @@ describe("Antigravity transformRequest", () => {
     const body = getCapturedBody()
     const innerRequest = body.request as Record<string, unknown>
 
-    expect(innerRequest.sessionId).toBe("test-session-id")
+    expect(innerRequest.sessionId).not.toBe("test-session-id")
+    expect(innerRequest.sessionId).toBeString()
     expect(innerRequest.labels).toBeUndefined()
+  })
+
+  it("replaces todoread tool definition with placeholder schema", async () => {
+    const { google, getCapturedBody } = setupTest()
+
+    await generateText({
+      model: google("gemini-1.5-flash"),
+      prompt: "Hello",
+      tools: {
+        todoread: {
+          description: "Use this tool to read your todo list",
+          parameters: { type: "object", properties: {} },
+        },
+      },
+    })
+
+    const body = getCapturedBody()
+    const innerRequest = body.request as Record<string, unknown>
+    const tools = innerRequest.tools as Array<Record<string, unknown>>
+    const firstTool = tools[0]
+    expect(firstTool).toBeDefined()
+    if (!firstTool) throw new Error("firstTool is undefined")
+    const functionDeclarations = firstTool.functionDeclarations as Array<
+      Record<string, unknown>
+    >
+    const todoread = functionDeclarations.find((f) => f.name === "todoread")
+
+    expect(todoread).toBeDefined()
+    expect(todoread).toEqual({
+      name: "todoread",
+      description: "Use this tool to read your todo list",
+      parameters: {
+        type: "object",
+        properties: {
+          _placeholder: {
+            type: "boolean",
+            description: "Placeholder. Always pass true.",
+          },
+        },
+        required: ["_placeholder"],
+        additionalProperties: false,
+      },
+    })
   })
 })

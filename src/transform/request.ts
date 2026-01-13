@@ -49,7 +49,8 @@ export const transformRequest = Effect.fn("transformRequest")(function* (
   // Transform headers
   const headers = new Headers(init?.headers)
   headers.delete("x-api-key")
-  headers.delete("x-goog-api-key")
+  // headers.delete("x-goog-api-key")
+  headers.set("x-opencode-tools-debug", "1")
   headers.set("Authorization", `Bearer ${accessToken}`)
 
   for (const [key, value] of Object.entries(config.HEADERS)) {
@@ -69,8 +70,8 @@ export const transformRequest = Effect.fn("transformRequest")(function* (
 
   const wrappedBody = {
     project: projectId,
-    request: parsedBody ?? {},
     model,
+    request: parsedBody ?? {},
   }
 
   const {
