@@ -251,6 +251,13 @@ export const antigravity: Plugin = async (context) => {
         },
       ],
     },
+
+    "experimental.chat.system.transform": async (_input, output) => {
+      // THIS IS REQUIRED OTHERWISE YOU'LL GET 429 OR 403 FOR SOME GODDAMN REASON
+      output.system.unshift(
+        "You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.**Absolute paths only****Proactiveness**",
+      )
+    },
     "chat.params": async (input, output) => {
       await runtime.runPromise(
         Effect.log("chat.params event before:", input.model, output.options),

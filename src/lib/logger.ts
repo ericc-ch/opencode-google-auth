@@ -2,8 +2,9 @@ import { PlatformLogger } from "@effect/platform"
 import { Effect, Inspectable, Logger, LogLevel, pipe } from "effect"
 import path from "node:path"
 import type { OpenCodeLogLevel } from "../types"
-import { ProviderConfig } from "../services/config"
+import { PLUGIN_NAME, ProviderConfig } from "../services/config"
 import { OpenCodeContext } from "../services/opencode"
+import { xdgData } from "xdg-basedir"
 
 const makeOpenCodeLogger = Effect.gen(function* () {
   const openCode = yield* OpenCodeContext
@@ -32,11 +33,13 @@ const makeOpenCodeLogger = Effect.gen(function* () {
   })
 })
 
+const LOG_DIR = xdgData ? path.join(xdgData, "opencode") : import.meta.dir
+
 export const combinedLogger = Effect.gen(function* () {
   const openCodeLogger = yield* makeOpenCodeLogger
   const fileLogger = yield* pipe(
     Logger.jsonLogger,
-    PlatformLogger.toFile(path.join(import.meta.dir, "plugin.log")),
+    PlatformLogger.toFile(path.join(LOG_DIR, `${PLUGIN_NAME}.log`)),
   )
 
   return Logger.zip(openCodeLogger, fileLogger)

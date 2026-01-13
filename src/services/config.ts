@@ -40,8 +40,8 @@ export class ProviderConfig extends Context.Tag("ProviderConfig")<
   ProviderConfigShape
 >() {}
 
+export const PLUGIN_NAME = "opencode-google-auth"
 export const CODE_ASSIST_VERSION = "v1internal"
-
 export const CLIENT_METADATA = {
   ideType: "IDE_UNSPECIFIED",
   platform: "PLATFORM_UNSPECIFIED",
@@ -157,7 +157,6 @@ export const antigravityConfig = (): ProviderConfigShape => ({
         ...geminiPro,
         id: "gemini-3-pro-low",
         name: "Gemini 3 Pro (Low)",
-        temperature: false,
         options: {
           thinkingConfig: {
             thinkingLevel: "low",
@@ -278,101 +277,18 @@ export const antigravityConfig = (): ProviderConfigShape => ({
     }
 
     if (sessionId) {
-      const hashedSession = yield* Effect.promise(() => hash(sessionId))
-
-      const finalSessionId = [
-        `-${crypto.randomUUID()}`,
-        body.model,
-        body.project,
-        `seed-${hashedSession}`,
-      ].join(":")
-
-      innerRequest.sessionId = finalSessionId
-    }
-
-    if (innerRequest.tools && Array.isArray(innerRequest.tools)) {
-      const tools = innerRequest.tools as Array<Record<string, unknown>>
-      for (const tool of tools) {
-        if (
-          tool.functionDeclarations
-          && Array.isArray(tool.functionDeclarations)
-        ) {
-          const functionDeclarations = tool.functionDeclarations as Array<
-            Record<string, unknown>
-          >
-          for (let i = 0; i < functionDeclarations.length; i++) {
-            const declaration = functionDeclarations[i]
-            if (declaration && declaration.name === "todoread") {
-              functionDeclarations[i] = {
-                ...functionDeclarations[i],
-                parameters: {
-                  type: "object",
-                  properties: {
-                    _placeholder: {
-                      type: "boolean",
-                      description: "Placeholder. Always pass true.",
-                    },
-                  },
-                  required: ["_placeholder"],
-                  additionalProperties: false,
-                },
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // if (
-    //   innerRequest.systemInstruction
-    //   && typeof innerRequest.systemInstruction === "object"
-    // ) {
-    //   const systemInstruction = innerRequest.systemInstruction as Record<
-    //     string,
-    //     unknown
-    //   >
-
-    //   if (systemInstruction.parts && Array.isArray(systemInstruction.parts)) {
-    //     let parts = systemInstruction.parts as Array<{ text: string }>
-
-    //     parts.unshift({
-    //       text: "You are Antigravity, a powerful agentic AI coding assistant designed by the Google DeepMind team working on Advanced Agentic Coding.",
-    //     })
-    //   }
-    // }
-
-    if (
-      innerRequest.systemInstruction
-      && typeof innerRequest.systemInstruction === "object"
-    ) {
-      const systemInstruction = innerRequest.systemInstruction as Record<
-        string,
-        unknown
-      >
-
-      systemInstruction.role = "user"
+      innerRequest.sessionId = sessionId
     }
 
     return {
       headers,
       url,
       body: {
-        ...body,
         requestType: "agent",
         userAgent: "antigravity",
         requestId: `agent-${crypto.randomUUID()}`,
+        ...body,
       },
     }
   }),
 })
-
-async function hash(str: string) {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(str)
-
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
-
-  return hashHex.slice(0, 16)
-}

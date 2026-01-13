@@ -2,4 +2,7 @@ node_modules/
 dist/
 
 .context/
-.opencode/
+
+.opencode/plugin/
+.opencode/bun.lock
+.opencode/package.json

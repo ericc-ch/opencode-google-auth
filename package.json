@@ -26,9 +26,7 @@
     "src"
   ],
   "scripts": {
-    "prebuild": "bun ./scripts/fetch-models.ts",
-    "predeploy": "bun run build",
-    "deploy": "bun ./scripts/deploy.ts",
+    "deploy": "bun build ./src/main.ts --target bun --outfile .opencode/plugin/opencode-google-auth.js",
     "format": "prettier --write .",
     "lint": "oxlint",
     "release": "bumpp && npm publish",
@@ -41,7 +39,8 @@
     "@opencode-ai/plugin": "^1.1.15",
     "arkregex": "^0.0.5",
     "effect": "^3.19.14",
-    "google-auth-library": "^10.5.0"
+    "google-auth-library": "^10.5.0",
+    "xdg-basedir": "^5.1.0"
   },
   "devDependencies": {
     "@ai-sdk/google": "^3.0.7",
