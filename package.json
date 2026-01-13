@@ -1,15 +1,15 @@
 {
-  "name": "pkg-placeholder",
+  "name": "opencode-google-auth",
   "version": "0.0.1",
   "description": "_description_",
   "keywords": [
-    "pkg-placeholder"
+    "opencode-google-auth"
   ],
-  "homepage": "https://github.com/ericc-ch/pkg-placeholder",
-  "bugs": "https://github.com/ericc-ch/pkg-placeholder/issues",
+  "homepage": "https://github.com/ericc-ch/opencode-google-auth",
+  "bugs": "https://github.com/ericc-ch/opencode-google-auth/issues",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ericc-ch/pkg-placeholder.git"
+    "url": "https://github.com/ericc-ch/opencode-google-auth.git"
   },
   "author": {
     "name": "Erick Christian",
@@ -20,9 +20,6 @@
     ".": {
       "default": "./dist/main.mjs"
     }
-  },
-  "bin": {
-    "pkg-placeholder": "./dist/cli.js"
   },
   "files": [
     "dist",
