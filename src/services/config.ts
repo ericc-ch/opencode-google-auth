@@ -205,7 +205,7 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       ...googleProvider,
       id: antigravityConfig().SERVICE_NAME,
       name: antigravityConfig().DISPLAY_NAME,
-      api: antigravityConfig().ENDPOINTS.at(2) as string,
+      api: antigravityConfig().ENDPOINTS.at(0) as string,
       models,
     }
   },
