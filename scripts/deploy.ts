@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import path from "node:path"
 import fs from "node:fs/promises"
-import { geminiCliConfig } from "../src/lib/services/config"
+import { geminiCliConfig } from "../src/services/config"
 
 const rootDir = path.join(import.meta.dir, "..")
 const distDir = path.join(rootDir, "dist")

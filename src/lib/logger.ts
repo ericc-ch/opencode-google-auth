@@ -2,8 +2,8 @@ import { PlatformLogger } from "@effect/platform"
 import { Effect, Inspectable, Logger, LogLevel, pipe } from "effect"
 import path from "node:path"
 import type { OpenCodeLogLevel } from "../types"
-import { ProviderConfig } from "./services/config"
-import { OpenCodeContext } from "./services/opencode"
+import { ProviderConfig } from "../services/config"
+import { OpenCodeContext } from "../services/opencode"
 
 const makeOpenCodeLogger = Effect.gen(function* () {
   const openCode = yield* OpenCodeContext

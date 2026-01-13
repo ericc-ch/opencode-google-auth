@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import path from "node:path"
-import { GEMINI_CLI_MODELS } from "../src/lib/services/config"
+import { GEMINI_CLI_MODELS } from "../src/services/config"
 
 const MODELS_DEV_URL = "https://models.dev/api.json"
 

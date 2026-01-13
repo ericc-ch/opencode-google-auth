@@ -3,10 +3,10 @@
     "vtsls": {
       "settings": {
         "vtsls": {
-          "autoUseWorkspaceTsdk": true,
-        },
-      },
-    },
+          "autoUseWorkspaceTsdk": true
+        }
+      }
+    }
   },
-  "file_scan_exclusions": [".git/"],
+  "file_scan_exclusions": [".git/"]
 }

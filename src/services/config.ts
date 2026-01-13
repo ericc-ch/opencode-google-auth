@@ -5,7 +5,7 @@ import type {
   OpenCodeModel,
   OpenCodeProvider,
   Provider,
-} from "../../types"
+} from "../types"
 
 export interface WrappedBody {
   readonly project: string

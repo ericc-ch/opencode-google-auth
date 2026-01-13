@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { transformRequest } from "../../transform/request"
+import { transformRequest } from "../transform/request"
 import { antigravityConfig, ProviderConfig } from "./config"
 import { Session } from "./session"
 import { Effect, Layer, pipe } from "effect"

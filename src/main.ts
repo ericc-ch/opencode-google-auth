@@ -10,9 +10,9 @@ import {
   antigravityConfig,
   geminiCliConfig,
   ProviderConfig,
-} from "./lib/services/config"
-import { OAuth } from "./lib/services/oauth"
-import { Session } from "./lib/services/session"
+} from "./services/config"
+import { OAuth } from "./services/oauth"
+import { Session } from "./services/session"
 import { transformRequest } from "./transform/request"
 import { transformNonStreamingResponse } from "./transform/response"
 import { transformStreamingResponse } from "./transform/stream"

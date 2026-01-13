@@ -14,7 +14,7 @@ import {
 import { BunHttpServer } from "@effect/platform-bun"
 import { Data, Deferred, Effect, Fiber, Schema } from "effect"
 import { OAuth2Client } from "google-auth-library"
-import type { BunServeOptions } from "../../types"
+import type { BunServeOptions } from "../types"
 import { ProviderConfig } from "./config"
 
 export class OAuthError extends Data.TaggedError("OAuthError")<{

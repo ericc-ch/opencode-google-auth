@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { transformRequest } from "./request"
-import { geminiCliConfig, ProviderConfig } from "../lib/services/config"
-import { Session } from "../lib/services/session"
+import { geminiCliConfig, ProviderConfig } from "../services/config"
+import { Session } from "../services/session"
 import { Effect, Layer, pipe } from "effect"
 
 describe("transformRequest", () => {

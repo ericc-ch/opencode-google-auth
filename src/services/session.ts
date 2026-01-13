@@ -5,7 +5,7 @@ import {
 } from "@effect/platform"
 import { Data, Effect, pipe, Ref, Schema } from "effect"
 import { OAuth2Client } from "google-auth-library"
-import type { Credentials } from "../../types"
+import type { Credentials } from "../types"
 import { CODE_ASSIST_VERSION, ProviderConfig } from "./config"
 import { OpenCodeContext } from "./opencode"
 

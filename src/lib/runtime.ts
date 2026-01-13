@@ -3,10 +3,10 @@ import { BunFileSystem } from "@effect/platform-bun"
 import type { PluginInput } from "@opencode-ai/plugin"
 import { Layer, Logger, ManagedRuntime, pipe } from "effect"
 import { combinedLogger } from "./logger"
-import { ProviderConfig, type ProviderConfigShape } from "./services/config"
-import { OAuth } from "./services/oauth"
-import { OpenCodeContext } from "./services/opencode"
-import { Session } from "./services/session"
+import { ProviderConfig, type ProviderConfigShape } from "../services/config"
+import { OAuth } from "../services/oauth"
+import { OpenCodeContext } from "../services/opencode"
+import { Session } from "../services/session"
 
 export const makeRuntime = ({
   providerConfig,

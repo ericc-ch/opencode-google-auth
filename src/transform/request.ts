@@ -4,8 +4,8 @@ import {
   CODE_ASSIST_VERSION,
   ProviderConfig,
   type RequestContext,
-} from "../lib/services/config"
-import { Session } from "../lib/services/session"
+} from "../services/config"
+import { Session } from "../services/session"
 
 const STREAM_ACTION = "streamGenerateContent"
 const PATH_PATTERN = regex("/models/(?<model>[^:]+):(?<action>\\w+)")
