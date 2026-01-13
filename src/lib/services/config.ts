@@ -222,24 +222,22 @@ export const antigravityConfig = (): ProviderConfigShape => ({
     }
 
     // Handle thinkingConfig for Claude models
-    if (
-      body.model.toLowerCase().includes("claude")
-      && body.request
-      && typeof body.request === "object"
-    ) {
+    const isClaude = body.model.toLowerCase().includes("claude")
+    const isThinking = body.model.toLowerCase().includes("thinking")
+
+    if (isClaude && body.request && typeof body.request === "object") {
       const request = body.request as Record<string, unknown>
       const generationConfig = request.generationConfig as
         | Record<string, unknown>
         | undefined
 
       // For non-thinking Claude, remove thinkingConfig entirely
-      const isNonThinkingClaude = !body.model.toLowerCase().includes("thinking")
-      if (isNonThinkingClaude && generationConfig?.thinkingConfig) {
+      if (!isThinking && generationConfig?.thinkingConfig) {
         delete generationConfig.thinkingConfig
       }
 
       // For thinking Claude, convert camelCase to snake_case and add default budget
-      if (!isNonThinkingClaude && generationConfig?.thinkingConfig) {
+      if (isThinking && generationConfig?.thinkingConfig) {
         const thinkingConfig = generationConfig.thinkingConfig as Record<
           string,
           unknown
@@ -259,6 +257,10 @@ export const antigravityConfig = (): ProviderConfigShape => ({
         if (thinkingConfig.thinking_budget === undefined) {
           thinkingConfig.thinking_budget = 32768 // Default to high tier
         }
+      }
+
+      if (isThinking) {
+        headers.set("anthropic-beta", "interleaved-thinking-2025-05-14")
       }
     }
 

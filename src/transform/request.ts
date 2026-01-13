@@ -1,6 +1,10 @@
 import { regex } from "arkregex"
 import { Effect, pipe } from "effect"
-import { CODE_ASSIST_VERSION, ProviderConfig } from "../lib/services/config"
+import {
+  CODE_ASSIST_VERSION,
+  ProviderConfig,
+  type RequestContext,
+} from "../lib/services/config"
 import { Session } from "../lib/services/session"
 
 const STREAM_ACTION = "streamGenerateContent"
@@ -75,7 +79,11 @@ export const transformRequest = Effect.fn("transformRequest")(function* (
     url: finalUrl,
   } =
     config.transformRequest ?
-      yield* config.transformRequest({ body: wrappedBody, headers, url })
+      yield* config.transformRequest({
+        body: wrappedBody,
+        headers,
+        url,
+      } satisfies RequestContext)
     : { body: wrappedBody, headers, url }
 
   const finalBody =
