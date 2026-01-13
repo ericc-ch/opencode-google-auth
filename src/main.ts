@@ -17,6 +17,7 @@ import { transformRequest } from "./transform/request"
 import { transformNonStreamingResponse } from "./transform/response"
 import { transformStreamingResponse } from "./transform/stream"
 import type { Credentials, ModelsDev } from "./types"
+import antigravitySpoof from "./antigravity-spoof.txt"
 
 const fetchModelsDev = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
@@ -254,9 +255,7 @@ export const antigravity: Plugin = async (context) => {
 
     "experimental.chat.system.transform": async (_input, output) => {
       // THIS IS REQUIRED OTHERWISE YOU'LL GET 429 OR 403 FOR SOME GODDAMN REASON
-      output.system.unshift(
-        "You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.**Absolute paths only****Proactiveness**",
-      )
+      output.system.unshift(antigravitySpoof)
     },
     "chat.params": async (input, output) => {
       await runtime.runPromise(
