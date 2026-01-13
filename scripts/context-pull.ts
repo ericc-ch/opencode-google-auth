@@ -22,28 +22,8 @@ export const repos = [
     branch: "main",
   },
   {
-    name: "gemini-cli",
-    remote: "https://github.com/google-gemini/gemini-cli.git",
-    branch: "main",
-  },
-  {
-    name: "opencode-gemini-auth",
-    remote: "https://github.com/jenslys/opencode-gemini-auth.git",
-    branch: "main",
-  },
-  {
-    name: "ai-sdk",
-    remote: "https://github.com/vercel/ai.git",
-    branch: "main",
-  },
-  {
-    name: "opencode-antigravity-auth",
-    remote: "https://github.com/NoeFabris/opencode-antigravity-auth.git",
-    branch: "main",
-  },
-  {
-    name: "cli-proxy-api",
-    remote: "https://github.com/router-for-me/CLIProxyAPI.git",
+    name: "opencode-google-antigravity-auth",
+    remote: "https://github.com/shekohex/opencode-google-antigravity-auth.git",
     branch: "main",
   },
 ]
