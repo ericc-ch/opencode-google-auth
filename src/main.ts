@@ -69,6 +69,11 @@ const customFetch = Effect.fn(function* (
       )
     }
 
+    if (config.skipRequestTransform) {
+      yield* Effect.log("Skipping response transformation")
+      return response
+    }
+
     return result.streaming ?
         transformStreamingResponse(response)
       : yield* Effect.promise(() => transformNonStreamingResponse(response))

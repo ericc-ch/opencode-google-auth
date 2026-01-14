@@ -33,6 +33,7 @@ export interface ProviderConfigShape {
     headers: Headers
     url: URL
   }>
+  readonly skipRequestTransform?: boolean
 }
 
 export class ProviderConfig extends Context.Tag("ProviderConfig")<
@@ -103,6 +104,7 @@ export const geminiCliConfig = (): ProviderConfigShape => ({
       models: filteredModels as Record<string, OpenCodeModel>,
     }
   },
+  skipRequestTransform: false,
 })
 
 export const antigravityConfig = (): ProviderConfigShape => ({
@@ -246,7 +248,7 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       id: antigravityConfig().SERVICE_NAME,
       name: antigravityConfig().DISPLAY_NAME,
       api: antigravityConfig().ENDPOINTS.at(0) as string,
-      // npm: "google-antigravity-ai-provider",
+      npm: "google-antigravity-ai-provider",
       models,
     }
   },
@@ -278,61 +280,10 @@ export const antigravityConfig = (): ProviderConfigShape => ({
     const isThinking = body.model.toLowerCase().includes("thinking")
 
     if (isClaude && body.request && typeof body.request === "object") {
-      const request = body.request as Record<string, unknown>
-      const generationConfig = request.generationConfig as
-        | Record<string, unknown>
-        | undefined
-
-      const tools = request.tools as
-        | Array<{ functionDeclarations?: Array<{ parameters?: unknown }> }>
-        | undefined
-      if (tools && Array.isArray(tools)) {
-        for (const tool of tools) {
-          if (
-            tool.functionDeclarations
-            && Array.isArray(tool.functionDeclarations)
-          ) {
-            for (const func of tool.functionDeclarations) {
-              if (!func.parameters) {
-                func.parameters = { type: "object", properties: {} }
-              }
-            }
-          }
-        }
-      }
-
       innerRequest.toolConfig = {
         functionCallingConfig: {
           mode: "VALIDATED",
         },
-      }
-
-      // For non-thinking Claude, remove thinkingConfig entirely
-      if (!isThinking && generationConfig?.thinkingConfig) {
-        delete generationConfig.thinkingConfig
-      }
-
-      // For thinking Claude, convert camelCase to snake_case and add default budget
-      if (isThinking && generationConfig?.thinkingConfig) {
-        const thinkingConfig = generationConfig.thinkingConfig as Record<
-          string,
-          unknown
-        >
-
-        if (thinkingConfig.includeThoughts !== undefined) {
-          thinkingConfig.include_thoughts = thinkingConfig.includeThoughts
-          delete thinkingConfig.includeThoughts
-        }
-
-        if (thinkingConfig.thinkingBudget !== undefined) {
-          thinkingConfig.thinking_budget = thinkingConfig.thinkingBudget
-          delete thinkingConfig.thinkingBudget
-        }
-
-        // Add default thinking_budget if not present (required for Claude thinking)
-        if (thinkingConfig.thinking_budget === undefined) {
-          thinkingConfig.thinking_budget = 32768 // Default to high tier
-        }
       }
 
       if (isThinking) {
@@ -355,4 +306,5 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       },
     }
   }),
+  skipRequestTransform: true,
 })
