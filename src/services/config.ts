@@ -49,8 +49,8 @@ export const CLIENT_METADATA = {
 } as const
 
 export const GEMINI_CLI_MODELS = [
-  // "gemini-2.5-pro",
-  // "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
   "gemini-3-pro-preview",
   "gemini-3-flash-preview",
@@ -193,11 +193,51 @@ export const antigravityConfig = (): ProviderConfigShape => ({
         ...claudeSonnet,
         id: "claude-sonnet-4-5-thinking",
         name: "Claude Sonnet 4.5 (Thinking)",
+        options: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 31999,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions,
+        variants: {
+          high: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: 16000,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+          max: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: 31999,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+        },
       },
       "claude-opus-4-5-thinking": {
         ...claudeOpus,
         id: "claude-opus-4-5-thinking",
         name: "Claude Opus 4.5 (Thinking)",
+        options: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 31999,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions,
+        variants: {
+          high: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: 16000,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+          max: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: 31999,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+        },
       },
     }
 
@@ -206,6 +246,7 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       id: antigravityConfig().SERVICE_NAME,
       name: antigravityConfig().DISPLAY_NAME,
       api: antigravityConfig().ENDPOINTS.at(0) as string,
+      // npm: "google-antigravity-ai-provider",
       models,
     }
   },

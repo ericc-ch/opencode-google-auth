@@ -3,6 +3,7 @@ dist/
 
 .context/
 
+.opencode/plans/
 .opencode/plugin/
 .opencode/bun.lock
 .opencode/package.json
