@@ -28,7 +28,7 @@
   "scripts": {
     "deploy": "bun build ./src/main.ts --target bun --outfile .opencode/plugin/opencode-google-auth.js",
     "format": "prettier --write .",
-    "lint": "oxlint",
+    "lint": "oxlint --type-aware",
     "release": "bumpp && npm publish",
     "typecheck": "tsgo"
   },
