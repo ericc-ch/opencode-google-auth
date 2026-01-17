@@ -181,66 +181,66 @@ export const antigravityConfig = (): ProviderConfigShape => ({
           },
         } satisfies GoogleGenerativeAIProviderOptions,
       },
-      "claude-sonnet-4-5": {
-        ...claudeSonnet,
-        id: "claude-sonnet-4-5",
-        reasoning: false,
-        options: {
-          thinkingConfig: {
-            includeThoughts: false,
-          },
-        } satisfies GoogleGenerativeAIProviderOptions,
-      },
-      "claude-sonnet-4-5-thinking": {
-        ...claudeSonnet,
-        id: "claude-sonnet-4-5-thinking",
-        name: "Claude Sonnet 4.5 (Thinking)",
-        options: {
-          thinkingConfig: {
-            includeThoughts: true,
-            thinkingBudget: 31999,
-          },
-        } satisfies GoogleGenerativeAIProviderOptions,
-        variants: {
-          high: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 16000,
-            },
-          } satisfies GoogleGenerativeAIProviderOptions,
-          max: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 31999,
-            },
-          } satisfies GoogleGenerativeAIProviderOptions,
-        },
-      },
-      "claude-opus-4-5-thinking": {
-        ...claudeOpus,
-        id: "claude-opus-4-5-thinking",
-        name: "Claude Opus 4.5 (Thinking)",
-        options: {
-          thinkingConfig: {
-            includeThoughts: true,
-            thinkingBudget: 31999,
-          },
-        } satisfies GoogleGenerativeAIProviderOptions,
-        variants: {
-          high: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 16000,
-            },
-          } satisfies GoogleGenerativeAIProviderOptions,
-          max: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 31999,
-            },
-          } satisfies GoogleGenerativeAIProviderOptions,
-        },
-      },
+      // "claude-sonnet-4-5": {
+      //   ...claudeSonnet,
+      //   id: "claude-sonnet-4-5",
+      //   reasoning: false,
+      //   options: {
+      //     thinkingConfig: {
+      //       includeThoughts: false,
+      //     },
+      //   } satisfies GoogleGenerativeAIProviderOptions,
+      // },
+      // "claude-sonnet-4-5-thinking": {
+      //   ...claudeSonnet,
+      //   id: "claude-sonnet-4-5-thinking",
+      //   name: "Claude Sonnet 4.5 (Thinking)",
+      //   options: {
+      //     thinkingConfig: {
+      //       includeThoughts: true,
+      //       thinkingBudget: 31999,
+      //     },
+      //   } satisfies GoogleGenerativeAIProviderOptions,
+      //   variants: {
+      //     high: {
+      //       thinkingConfig: {
+      //         includeThoughts: true,
+      //         thinkingBudget: 16000,
+      //       },
+      //     } satisfies GoogleGenerativeAIProviderOptions,
+      //     max: {
+      //       thinkingConfig: {
+      //         includeThoughts: true,
+      //         thinkingBudget: 31999,
+      //       },
+      //     } satisfies GoogleGenerativeAIProviderOptions,
+      //   },
+      // },
+      // "claude-opus-4-5-thinking": {
+      //   ...claudeOpus,
+      //   id: "claude-opus-4-5-thinking",
+      //   name: "Claude Opus 4.5 (Thinking)",
+      //   options: {
+      //     thinkingConfig: {
+      //       includeThoughts: true,
+      //       thinkingBudget: 31999,
+      //     },
+      //   } satisfies GoogleGenerativeAIProviderOptions,
+      //   variants: {
+      //     high: {
+      //       thinkingConfig: {
+      //         includeThoughts: true,
+      //         thinkingBudget: 16000,
+      //       },
+      //     } satisfies GoogleGenerativeAIProviderOptions,
+      //     max: {
+      //       thinkingConfig: {
+      //         includeThoughts: true,
+      //         thinkingBudget: 31999,
+      //       },
+      //     } satisfies GoogleGenerativeAIProviderOptions,
+      //   },
+      // },
     }
 
     return {
@@ -280,6 +280,25 @@ export const antigravityConfig = (): ProviderConfigShape => ({
     const isThinking = body.model.toLowerCase().includes("thinking")
 
     if (isClaude && body.request && typeof body.request === "object") {
+      const request = body.request as Record<string, unknown>
+      const tools = request.tools as
+        | Array<{ functionDeclarations?: Array<{ parameters?: unknown }> }>
+        | undefined
+      if (tools && Array.isArray(tools)) {
+        for (const tool of tools) {
+          if (
+            tool.functionDeclarations
+            && Array.isArray(tool.functionDeclarations)
+          ) {
+            for (const func of tool.functionDeclarations) {
+              if (!func.parameters) {
+                func.parameters = { type: "object", properties: {} }
+              }
+            }
+          }
+        }
+      }
+
       innerRequest.toolConfig = {
         functionCallingConfig: {
           mode: "VALIDATED",
