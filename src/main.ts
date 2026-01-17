@@ -172,112 +172,112 @@ export const geminiCli: Plugin = async (context) => {
   }
 }
 
-// export const antigravity: Plugin = async (context) => {
-//   const runtime = makeRuntime({
-//     openCodeCtx: context,
-//     providerConfig: antigravityConfig(),
-//   })
+export const antigravity: Plugin = async (context) => {
+  const runtime = makeRuntime({
+    openCodeCtx: context,
+    providerConfig: antigravityConfig(),
+  })
 
-//   const config = await runtime.runPromise(
-//     Effect.gen(function* () {
-//       const providerConfig = yield* ProviderConfig
-//       const modelsDev = yield* fetchModelsDev
+  const config = await runtime.runPromise(
+    Effect.gen(function* () {
+      const providerConfig = yield* ProviderConfig
+      const modelsDev = yield* fetchModelsDev
 
-//       return providerConfig.getConfig(modelsDev)
-//     }),
-//   )
+      return providerConfig.getConfig(modelsDev)
+    }),
+  )
 
-//   return {
-//     config: async (cfg) => {
-//       cfg.provider ??= {}
-//       cfg.provider[config.id as string] = config
-//     },
-//     auth: {
-//       provider: config.id as string,
-//       loader: async (getAuth) => {
-//         const auth = await getAuth()
-//         if (auth.type !== "oauth") return {}
+  return {
+    config: async (cfg) => {
+      cfg.provider ??= {}
+      cfg.provider[config.id as string] = config
+    },
+    auth: {
+      provider: config.id as string,
+      loader: async (getAuth) => {
+        const auth = await getAuth()
+        if (auth.type !== "oauth") return {}
 
-//         const credentials: Credentials = {
-//           access_token: auth.access,
-//           refresh_token: auth.refresh,
-//           expiry_date: auth.expires,
-//         }
+        const credentials: Credentials = {
+          access_token: auth.access,
+          refresh_token: auth.refresh,
+          expiry_date: auth.expires,
+        }
 
-//         await runtime.runPromise(
-//           Effect.gen(function* () {
-//             const session = yield* Session
-//             yield* session.setCredentials(credentials)
-//           }),
-//         )
+        await runtime.runPromise(
+          Effect.gen(function* () {
+            const session = yield* Session
+            yield* session.setCredentials(credentials)
+          }),
+        )
 
-//         return {
-//           apiKey: "",
-//           fetch: (async (input, init) => {
-//             const response = await runtime.runPromise(customFetch(input, init))
-//             return response
-//           }) as typeof fetch,
-//         } satisfies GoogleGenerativeAIProviderSettings
-//       },
-//       methods: [
-//         {
-//           type: "oauth",
-//           label: "OAuth with Google",
-//           authorize: async () => {
-//             const result = await runtime.runPromise(
-//               Effect.gen(function* () {
-//                 const oauth = yield* OAuth
-//                 return yield* oauth.authenticate
-//               }),
-//             )
+        return {
+          apiKey: "",
+          fetch: (async (input, init) => {
+            const response = await runtime.runPromise(customFetch(input, init))
+            return response
+          }) as typeof fetch,
+        } satisfies GoogleGenerativeAIProviderSettings
+      },
+      methods: [
+        {
+          type: "oauth",
+          label: "OAuth with Google",
+          authorize: async () => {
+            const result = await runtime.runPromise(
+              Effect.gen(function* () {
+                const oauth = yield* OAuth
+                return yield* oauth.authenticate
+              }),
+            )
 
-//             return {
-//               url: "",
-//               method: "auto",
-//               instructions: "You are now authenticated!",
-//               callback: async () => {
-//                 const accessToken = result.access_token
-//                 const refreshToken = result.refresh_token
-//                 const expiryDate = result.expiry_date
+            return {
+              url: "",
+              method: "auto",
+              instructions: "You are now authenticated!",
+              callback: async () => {
+                const accessToken = result.access_token
+                const refreshToken = result.refresh_token
+                const expiryDate = result.expiry_date
 
-//                 if (!accessToken || !refreshToken || !expiryDate) {
-//                   return { type: "failed" }
-//                 }
+                if (!accessToken || !refreshToken || !expiryDate) {
+                  return { type: "failed" }
+                }
 
-//                 return {
-//                   type: "success",
-//                   provider: config.id as string,
-//                   access: accessToken,
-//                   refresh: refreshToken,
-//                   expires: expiryDate,
-//                 }
-//               },
-//             }
-//           },
-//         },
-//       ],
-//     },
-//     "experimental.chat.system.transform": async (_input, output) => {
-//       // THIS IS REQUIRED OTHERWISE YOU'LL GET 429 OR 403 FOR SOME GODDAMN REASON
-//       output.system.unshift(antigravitySpoof)
-//     },
-//     "chat.params": async (input, output) => {
-//       await runtime.runPromise(
-//         Effect.log("chat.params event before:", input.model, output.options),
-//       )
+                return {
+                  type: "success",
+                  provider: config.id as string,
+                  access: accessToken,
+                  refresh: refreshToken,
+                  expires: expiryDate,
+                }
+              },
+            }
+          },
+        },
+      ],
+    },
+    "experimental.chat.system.transform": async (_input, output) => {
+      // THIS IS REQUIRED OTHERWISE YOU'LL GET 429 OR 403 FOR SOME GODDAMN REASON
+      output.system.unshift(antigravitySpoof)
+    },
+    "chat.params": async (input, output) => {
+      await runtime.runPromise(
+        Effect.log("chat.params event before:", input.model, output.options),
+      )
 
-//       if (input.model.providerID === config.id) {
-//         output.options = {
-//           ...output.options,
-//           labels: {
-//             sessionId: input.sessionID,
-//           },
-//         } satisfies GoogleGenerativeAIProviderOptions
-//       }
+      if (input.model.providerID === config.id) {
+        output.options = {
+          ...output.options,
+          labels: {
+            sessionId: input.sessionID,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions
+      }
 
-//       await runtime.runPromise(
-//         Effect.log("chat.params event after:", input.model, output.options),
-//       )
-//     },
-//   }
-// }
+      await runtime.runPromise(
+        Effect.log("chat.params event after:", input.model, output.options),
+      )
+    },
+  }
+}
