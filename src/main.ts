@@ -1,10 +1,11 @@
+import { HttpClient } from "@effect/platform"
+import type { Plugin } from "@opencode-ai/plugin"
 import type {
   GoogleGenerativeAIProviderOptions,
   GoogleGenerativeAIProviderSettings,
-} from "@ai-sdk/google"
-import { HttpClient } from "@effect/platform"
-import type { Plugin } from "@opencode-ai/plugin"
+} from "cloudassist-ai-provider"
 import { Effect } from "effect"
+import antigravitySpoof from "./antigravity-spoof.txt"
 import { makeRuntime } from "./lib/runtime"
 import {
   antigravityConfig,
@@ -13,11 +14,7 @@ import {
 } from "./services/config"
 import { OAuth } from "./services/oauth"
 import { Session } from "./services/session"
-import { transformRequest } from "./transform/request"
-import { transformNonStreamingResponse } from "./transform/response"
-import { transformStreamingResponse } from "./transform/stream"
 import type { Credentials, ModelsDev } from "./types"
-import antigravitySpoof from "./antigravity-spoof.txt"
 
 const fetchModelsDev = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
@@ -34,25 +31,14 @@ const customFetch = Effect.fn(function* (
   let lastResponse: Response | null = null
 
   for (const endpoint of config.ENDPOINTS) {
-    const result = yield* transformRequest(input, init, endpoint)
+    yield* Effect.log("Trying endpoint", endpoint)
+    yield* Effect.log("Input", input)
+    yield* Effect.log("Init", init)
 
-    const { request, ...loggedBody } = JSON.parse(result.init.body as string)
-    const generationConfig = request.generationConfig
-
-    yield* Effect.log(
-      "Transformed request (Omitting request except generationConfig) :",
-      result.streaming,
-      result.input,
-      { ...loggedBody, request: { generationConfig } },
-    )
-
-    const response = yield* Effect.promise(() =>
-      fetch(result.input, result.init),
-    )
+    const response = yield* Effect.promise(() => fetch(input, init))
 
     // On 429 or 403, try next endpoint
     if (response.status === 429 || response.status === 403) {
-      yield* Effect.log(`${response.status} on ${endpoint}, trying next...`)
       lastResponse = response
       continue
     }
@@ -61,7 +47,7 @@ const customFetch = Effect.fn(function* (
       const cloned = response.clone()
       const clonedJson = yield* Effect.promise(() => cloned.json())
 
-      yield* Effect.log(
+      yield* Effect.logWarning(
         "Received response:",
         cloned.status,
         clonedJson,
@@ -69,18 +55,10 @@ const customFetch = Effect.fn(function* (
       )
     }
 
-    if (config.skipRequestTransform) {
-      yield* Effect.log("Skipping response transformation")
-      return response
-    }
-
-    return result.streaming ?
-        transformStreamingResponse(response)
-      : yield* Effect.promise(() => transformNonStreamingResponse(response))
+    return response
   }
 
-  // All endpoints exhausted with 429
-  yield* Effect.logWarning("All endpoints rate limited (429)")
+  yield* Effect.logError("All endpoints are rate limited (429)")
   return lastResponse as Response
 }, Effect.tapDefect(Effect.logError))
 
@@ -183,7 +161,10 @@ export const antigravity: Plugin = async (context) => {
       const providerConfig = yield* ProviderConfig
       const modelsDev = yield* fetchModelsDev
 
-      return providerConfig.getConfig(modelsDev)
+      const config = providerConfig.getConfig(modelsDev)
+      yield* Effect.log("Config initialized", config.id)
+
+      return config
     }),
   )
 
@@ -212,7 +193,7 @@ export const antigravity: Plugin = async (context) => {
         )
 
         return {
-          apiKey: "",
+          apiKey: auth.access,
           fetch: (async (input, init) => {
             const response = await runtime.runPromise(customFetch(input, init))
             return response
@@ -262,21 +243,33 @@ export const antigravity: Plugin = async (context) => {
       output.system.unshift(antigravitySpoof)
     },
     "chat.params": async (input, output) => {
-      await runtime.runPromise(
-        Effect.log("chat.params event before:", input.model, output.options),
+      const requestId = crypto.randomUUID()
+
+      const options = await runtime.runPromise(
+        Effect.gen(function* () {
+          const session = yield* Session
+          const project = yield* session.ensureProject
+          const projectId = project.cloudaicompanionProject
+
+          return {
+            projectId,
+          }
+        }),
       )
 
-      if (input.model.providerID === config.id) {
+      if (config.id === input.model.providerID) {
         output.options = {
           ...output.options,
-          labels: {
-            sessionId: input.sessionID,
-          },
+          userAgent: "antigravity",
+          requestType: "agent",
+          requestId: `agent-${requestId}`,
+          sessionId: input.sessionID,
+          projectId: options.projectId,
         } satisfies GoogleGenerativeAIProviderOptions
       }
 
       await runtime.runPromise(
-        Effect.log("chat.params event after:", input.model, output.options),
+        Effect.log("chat.params", config.id, input.model, output),
       )
     },
   }

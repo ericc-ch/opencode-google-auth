@@ -100,7 +100,7 @@ export const geminiCliConfig = (): ProviderConfigShape => ({
       ...provider,
       id: geminiCliConfig().SERVICE_NAME,
       name: geminiCliConfig().DISPLAY_NAME,
-      api: geminiCliConfig().ENDPOINTS.at(0) as string,
+      npm: "cloudassist-ai-provider",
       models: filteredModels as Record<string, OpenCodeModel>,
     }
   },
@@ -181,149 +181,74 @@ export const antigravityConfig = (): ProviderConfigShape => ({
           },
         } satisfies GoogleGenerativeAIProviderOptions,
       },
-      // "claude-sonnet-4-5": {
-      //   ...claudeSonnet,
-      //   id: "claude-sonnet-4-5",
-      //   reasoning: false,
-      //   options: {
-      //     thinkingConfig: {
-      //       includeThoughts: false,
-      //     },
-      //   } satisfies GoogleGenerativeAIProviderOptions,
-      // },
-      // "claude-sonnet-4-5-thinking": {
-      //   ...claudeSonnet,
-      //   id: "claude-sonnet-4-5-thinking",
-      //   name: "Claude Sonnet 4.5 (Thinking)",
-      //   options: {
-      //     thinkingConfig: {
-      //       includeThoughts: true,
-      //       thinkingBudget: 31999,
-      //     },
-      //   } satisfies GoogleGenerativeAIProviderOptions,
-      //   variants: {
-      //     high: {
-      //       thinkingConfig: {
-      //         includeThoughts: true,
-      //         thinkingBudget: 16000,
-      //       },
-      //     } satisfies GoogleGenerativeAIProviderOptions,
-      //     max: {
-      //       thinkingConfig: {
-      //         includeThoughts: true,
-      //         thinkingBudget: 31999,
-      //       },
-      //     } satisfies GoogleGenerativeAIProviderOptions,
-      //   },
-      // },
-      // "claude-opus-4-5-thinking": {
-      //   ...claudeOpus,
-      //   id: "claude-opus-4-5-thinking",
-      //   name: "Claude Opus 4.5 (Thinking)",
-      //   options: {
-      //     thinkingConfig: {
-      //       includeThoughts: true,
-      //       thinkingBudget: 31999,
-      //     },
-      //   } satisfies GoogleGenerativeAIProviderOptions,
-      //   variants: {
-      //     high: {
-      //       thinkingConfig: {
-      //         includeThoughts: true,
-      //         thinkingBudget: 16000,
-      //       },
-      //     } satisfies GoogleGenerativeAIProviderOptions,
-      //     max: {
-      //       thinkingConfig: {
-      //         includeThoughts: true,
-      //         thinkingBudget: 31999,
-      //       },
-      //     } satisfies GoogleGenerativeAIProviderOptions,
-      //   },
-      // },
+      "claude-sonnet-4-5": {
+        ...claudeSonnet,
+        id: "claude-sonnet-4-5",
+        reasoning: false,
+        options: {
+          thinkingConfig: {
+            includeThoughts: false,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions,
+      },
+      "claude-sonnet-4-5-thinking": {
+        ...claudeSonnet,
+        id: "claude-sonnet-4-5-thinking",
+        name: "Claude Sonnet 4.5 (Thinking)",
+        options: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 31999,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions,
+        variants: {
+          high: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: 16000,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+          max: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: 31999,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+        },
+      },
+      "claude-opus-4-5-thinking": {
+        ...claudeOpus,
+        id: "claude-opus-4-5-thinking",
+        name: "Claude Opus 4.5 (Thinking)",
+        options: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 31999,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions,
+        variants: {
+          high: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: 16000,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+          max: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: 31999,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+        },
+      },
     }
 
     return {
       ...googleProvider,
       id: antigravityConfig().SERVICE_NAME,
       name: antigravityConfig().DISPLAY_NAME,
-      api: antigravityConfig().ENDPOINTS.at(0) as string,
-      npm: "google-antigravity-ai-provider",
+      npm: "cloudassist-ai-provider",
       models,
     }
   },
-  transformRequest: Effect.fn(function* (context) {
-    yield* Effect.log(
-      "Transforming request for: ",
-      antigravityConfig().SERVICE_NAME,
-    )
-
-    const { body, headers, url } = context
-    const innerRequest = body.request as Record<string, unknown>
-
-    let sessionId: string | undefined
-    if (
-      innerRequest.labels
-      && typeof innerRequest.labels === "object"
-      && "sessionId" in innerRequest.labels
-    ) {
-      const labels = innerRequest.labels as Record<string, unknown>
-      sessionId = labels.sessionId as string
-      delete labels.sessionId
-      if (Object.keys(labels).length === 0) {
-        delete innerRequest.labels
-      }
-    }
-
-    // Handle thinkingConfig for Claude models
-    const isClaude = body.model.toLowerCase().includes("claude")
-    const isThinking = body.model.toLowerCase().includes("thinking")
-
-    if (isClaude && body.request && typeof body.request === "object") {
-      const request = body.request as Record<string, unknown>
-      const tools = request.tools as
-        | Array<{ functionDeclarations?: Array<{ parameters?: unknown }> }>
-        | undefined
-      if (tools && Array.isArray(tools)) {
-        for (const tool of tools) {
-          if (
-            tool.functionDeclarations
-            && Array.isArray(tool.functionDeclarations)
-          ) {
-            for (const func of tool.functionDeclarations) {
-              if (!func.parameters) {
-                func.parameters = { type: "object", properties: {} }
-              }
-            }
-          }
-        }
-      }
-
-      innerRequest.toolConfig = {
-        functionCallingConfig: {
-          mode: "VALIDATED",
-        },
-      }
-
-      if (isThinking) {
-        headers.set("anthropic-beta", "interleaved-thinking-2025-05-14")
-      }
-    }
-
-    if (sessionId) {
-      innerRequest.sessionId = sessionId
-    }
-
-    return {
-      headers,
-      url,
-      body: {
-        requestType: "agent",
-        userAgent: "antigravity",
-        requestId: `agent-${crypto.randomUUID()}`,
-        ...body,
-      },
-    }
-  }),
-  skipRequestTransform: true,
 })
