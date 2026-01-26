@@ -1,6 +1,8 @@
 import type { GoogleGenerativeAIProviderOptions } from "@ai-sdk/google"
-import { Context, Effect, pipe } from "effect"
+import { Context, pipe } from "effect"
 import type {
+  FetchInit,
+  FetchInput,
   ModelsDev,
   OpenCodeModel,
   OpenCodeProvider,
@@ -28,12 +30,10 @@ export interface ProviderConfigShape {
   readonly CLIENT_ID: string
   readonly CLIENT_SECRET: string
   readonly getConfig: (modelsDev: ModelsDev) => OpenCodeProvider
-  readonly transformRequest?: (context: RequestContext) => Effect.Effect<{
-    body: Record<string, unknown>
-    headers: Headers
-    url: URL
-  }>
-  readonly skipRequestTransform?: boolean
+  readonly requestTransform?: (
+    input: FetchInput,
+    init: FetchInit,
+  ) => [FetchInput, FetchInit]
 }
 
 export class ProviderConfig extends Context.Tag("ProviderConfig")<
@@ -104,7 +104,6 @@ export const geminiCliConfig = (): ProviderConfigShape => ({
       models: filteredModels as Record<string, OpenCodeModel>,
     }
   },
-  skipRequestTransform: false,
 })
 
 export const antigravityConfig = (): ProviderConfigShape => ({
@@ -133,9 +132,7 @@ export const antigravityConfig = (): ProviderConfigShape => ({
   },
   getConfig: (modelsDev) => {
     const googleProvider = modelsDev.google as Provider
-    const googleVertextProvider = modelsDev[
-      "google-vertex-anthropic"
-    ] as Provider
+    const googleVertextProvider = modelsDev.anthropic as Provider
 
     const geminiFlash = googleProvider.models[
       "gemini-3-flash-preview"
@@ -144,10 +141,10 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       "gemini-3-pro-preview"
     ] as OpenCodeModel
     const claudeSonnet = googleVertextProvider.models[
-      "claude-sonnet-4-5@20250929"
+      "claude-sonnet-4-5"
     ] as OpenCodeModel
     const claudeOpus = googleVertextProvider.models[
-      "claude-opus-4-5@20251101"
+      "claude-opus-4-5"
     ] as OpenCodeModel
 
     const models: Record<
@@ -250,5 +247,13 @@ export const antigravityConfig = (): ProviderConfigShape => ({
       npm: "cloudassist-ai-provider",
       models,
     }
+  },
+  requestTransform: (_input, init) => {
+    const headers = new Headers(init?.headers)
+    for (const [key, value] of Object.entries(antigravityConfig().HEADERS)) {
+      headers.set(key, value)
+    }
+
+    return [_input, { ...init, headers }]
   },
 })

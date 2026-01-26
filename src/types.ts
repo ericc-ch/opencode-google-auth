@@ -17,6 +17,9 @@ export type OpenCodeLogLevel = NonNullable<
 
 export type BunServeOptions = Partial<Bun.Serve.Options<undefined, never>>
 
+export type FetchInput = Parameters<typeof fetch>[0]
+export type FetchInit = Parameters<typeof fetch>[1]
+
 /**
  * Subset of google-auth-library Credentials type.
  *
