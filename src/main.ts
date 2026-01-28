@@ -19,6 +19,7 @@ const fetchModelsDev = Effect.gen(function* () {
 
 const customFetch = Effect.fn(function* (input: FetchInput, init: FetchInit) {
   const config = yield* ProviderConfig
+  const session = yield* Session
 
   let lastResponse: Response | null = null
 
@@ -27,12 +28,35 @@ const customFetch = Effect.fn(function* (input: FetchInput, init: FetchInit) {
     yield* Effect.log("Input", input)
     yield* Effect.log("Init", init)
 
-    const [finalInput, finalInit] = config.requestTransform?.(input, init) ?? [
+    let finalInitObj: FetchInit
+    const [finalInput, finalInit0] = config.requestTransform?.(input, init) ?? [
       input,
       init,
     ]
+    if (finalInit0 !== undefined) {
+      finalInitObj = finalInit0
+    } else if (init !== undefined) {
+      finalInitObj = init
+    } else {
+      finalInitObj = {}
+    }
 
-    const response = yield* Effect.promise(() => fetch(finalInput, finalInit))
+    const accessToken = yield* session.getAccessToken
+
+    const authHeaders: Record<string, string> = {}
+    if (finalInitObj.headers) {
+      for (const [key, value] of Object.entries(finalInitObj.headers)) {
+        authHeaders[key] = value as string
+      }
+    }
+    authHeaders.Authorization = `Bearer ${accessToken}`
+
+    const authInit: FetchInit = {
+      ...finalInitObj,
+      headers: authHeaders,
+    }
+
+    const response = yield* Effect.promise(() => fetch(finalInput, authInit))
 
     // On 429 or 403, try next endpoint
     if (response.status === 429 || response.status === 403) {

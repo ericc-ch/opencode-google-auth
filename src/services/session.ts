@@ -207,6 +207,7 @@ export class Session extends Effect.Service<Session>()("Session", {
         Ref.set(credentialsRef, credentials),
       getAccessToken,
       ensureProject,
+      refreshTokens,
     }
   }),
 }) {}
